@@ -28,10 +28,14 @@ migrate_working_dir/
 **/ios/Flutter/.last_build_id
 .dart_tool/
 .flutter-plugins-dependencies
+.metadata
 .pub-cache/
 .pub/
 /build/
 /coverage/
+
+# Windows alternate data streams / downloaded file markers
+*.Zone.Identifier
 
 # Symbolication related
 app.*.symbols
@@ -43,3 +47,5 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+fastapi.md
