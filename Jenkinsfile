@@ -105,6 +105,7 @@ FLUTTER_VERSION_NAME="$(grep '^flutter.versionName=' android/local.properties 2>
 FLUTTER_VERSION_CODE="$(grep '^flutter.versionCode=' android/local.properties 2>/dev/null | cut -d= -f2- || true)"
 cat > android/local.properties <<LOCAL_PROPERTIES_EOF
 sdk.dir=$ANDROID_HOME
+ndk.dir=$NDK_DIR
 flutter.sdk=$FLUTTER_ROOT
 flutter.buildMode=release
 flutter.versionName=${FLUTTER_VERSION_NAME:-1.0.0}

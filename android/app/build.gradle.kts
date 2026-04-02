@@ -5,10 +5,16 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val ciNdkPath = System.getenv("ANDROID_NDK_HOME") ?: System.getenv("ANDROID_NDK_ROOT")
+
 android {
     namespace = "com.example.globi_mobile"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    if (!ciNdkPath.isNullOrBlank()) {
+        ndkPath = ciNdkPath
+    } else {
+        ndkVersion = flutter.ndkVersion
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
