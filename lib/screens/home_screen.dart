@@ -58,25 +58,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Consumer2<AuthProvider, FamilyBlindProvider>(
       builder: (context, auth, familyBlind, _) {
-        final user = auth.user;
-
         return Scaffold(
           body: RefreshIndicator(
             onRefresh: () => _refreshHome(auth),
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                SliverAppBar.large(
-                  title: const Text('Globi'),
+                SliverAppBar(
+                  pinned: true,
+                  title: const Text('家属主页'),
                   actions: [
                     IconButton(
-                      icon: const Icon(Icons.swap_horiz),
-                      tooltip: '切换身份',
-                      onPressed: () => _confirmModeSwitch(context, auth),
-                    ),
-                    IconButton(
                       icon: const Icon(Icons.logout),
-                      tooltip: '退出登录',
+                      tooltip: '退出',
                       onPressed: () => _confirmLogout(context, auth),
                     ),
                   ],
@@ -85,164 +79,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.all(16),
                   sliver: SliverList.list(
                     children: [
-                      SizedBox(
-                        height: 180,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: _BentoCard(
-                                color: colorScheme.primaryContainer,
-                                onColor: colorScheme.onPrimaryContainer,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      user?.displayName ?? '未知用户',
-                                      style: theme.textTheme.headlineSmall
-                                          ?.copyWith(
-                                            color:
-                                                colorScheme.onPrimaryContainer,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                    ),
-                                    if (user?.email != null) ...[
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        user!.email!,
-                                        style: theme.textTheme.bodyMedium
-                                            ?.copyWith(
-                                              color: colorScheme
-                                                  .onPrimaryContainer
-                                                  .withValues(alpha: 0.8),
-                                            ),
-                                      ),
-                                    ],
-                                    const Spacer(),
-                                    if (user?.preferredUsername != null)
-                                      Text(
-                                        '@${user!.preferredUsername}',
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              color: colorScheme
-                                                  .onPrimaryContainer
-                                                  .withValues(alpha: 0.6),
-                                            ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            _BentoCard(
-                              color: colorScheme.tertiaryContainer,
-                              onColor: colorScheme.onTertiaryContainer,
-                              child: Center(
-                                child: CircleAvatar(
-                                  radius: 40,
-                                  backgroundColor: colorScheme.tertiary,
-                                  backgroundImage: user?.picture != null
-                                      ? NetworkImage(user!.picture!)
-                                      : null,
-                                  child: user?.picture == null
-                                      ? Text(
-                                          _getInitials(
-                                            user?.displayName ?? '?',
-                                          ),
-                                          style: TextStyle(
-                                            fontSize: 28,
-                                            fontWeight: FontWeight.bold,
-                                            color: colorScheme.onTertiary,
-                                          ),
-                                        )
-                                      : null,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _BentoCard(
-                        color: colorScheme.secondaryContainer,
-                        onColor: colorScheme.onSecondaryContainer,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.verified_user_outlined,
-                                  color: colorScheme.onSecondaryContainer,
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  '受保护接口状态',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: colorScheme.onSecondaryContainer,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              auth.privateMessage ?? '尚未拉取受保护接口数据',
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: colorScheme.onSecondaryContainer,
-                              ),
-                            ),
-                            if (auth.privateUserInfo != null) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                'Claims 数量：${auth.privateUserInfo!.length}',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSecondaryContainer
-                                      .withValues(alpha: 0.75),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _BentoCard(
-                        color: colorScheme.surfaceContainerLow,
-                        onColor: colorScheme.onSurface,
-                        child: Column(
-                          children: [
-                            _InfoRow(
-                              icon: Icons.person_outline,
-                              label: '用户名',
-                              value: user?.preferredUsername ?? '-',
-                            ),
-                            Divider(
-                              color: colorScheme.outline.withValues(alpha: 0.2),
-                            ),
-                            _InfoRow(
-                              icon: Icons.email_outlined,
-                              label: '邮箱',
-                              value: user?.email ?? '-',
-                              trailing: user?.emailVerified == true
-                                  ? Icon(
-                                      Icons.verified,
-                                      size: 18,
-                                      color: colorScheme.primary,
-                                    )
-                                  : null,
-                            ),
-                            Divider(
-                              color: colorScheme.outline.withValues(alpha: 0.2),
-                            ),
-                            _InfoRow(
-                              icon: Icons.fingerprint,
-                              label: '用户 ID',
-                              value: user?.sub ?? '-',
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
                       if (familyBlind.errorMessage != null) ...[
                         _BentoCard(
                           color: colorScheme.errorContainer,
@@ -286,29 +122,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 12),
                       SizedBox(
-                        height: 110,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _BentoActionTile(
-                                icon: Icons.refresh,
-                                label: '刷新会话',
-                                color: colorScheme.tertiaryContainer,
-                                onColor: colorScheme.onTertiaryContainer,
-                                onTap: () => _refreshHome(auth),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _BentoActionTile(
-                                icon: Icons.logout,
-                                label: '退出登录',
-                                color: colorScheme.errorContainer,
-                                onColor: colorScheme.onErrorContainer,
-                                onTap: () => _confirmLogout(context, auth),
-                              ),
-                            ),
-                          ],
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: familyBlind.isLoadingBlindUsers
+                              ? null
+                              : () => _refreshHome(auth),
+                          icon: familyBlind.isLoadingBlindUsers
+                              ? SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: colorScheme.onPrimary,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh_rounded),
+                          label: const Text('刷新数据'),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -323,44 +152,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  String _getInitials(String name) {
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-    }
-    return name.isNotEmpty ? name[0].toUpperCase() : '?';
-  }
-
   void _confirmLogout(BuildContext context, AuthProvider auth) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('确认退出'),
-        content: const Text('确定要退出登录吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              context.read<FamilyBlindProvider>().clearState();
-              auth.logout();
-            },
-            child: const Text('退出'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmModeSwitch(BuildContext context, AuthProvider auth) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('切换身份'),
-        content: const Text('切换身份会退出当前家属会话，并回到身份选择页。'),
+        content: const Text('确定要退出并返回首页身份选择吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
@@ -376,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
               }
               await context.read<AppModeProvider>().resetMode();
             },
-            child: const Text('确认切换'),
+            child: const Text('退出'),
           ),
         ],
       ),
@@ -417,7 +214,7 @@ class _BlindLinkGeneratorCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  '绑定盲人用户',
+                  '生成授权码',
                   style: theme.textTheme.titleLarge?.copyWith(
                     color: colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.bold,
@@ -428,7 +225,7 @@ class _BlindLinkGeneratorCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '输入盲人用户名称后生成一次性授权码，供盲人端首次绑定使用。',
+            '输入姓名后生成一次性授权码。',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
             ),
@@ -485,12 +282,12 @@ class _BlindLinkGeneratorCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '绑定对象：${latestLinkCode!.blindUserName}',
+                    '对象：${latestLinkCode!.blindUserName}',
                     style: theme.textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '过期时间：${_formatDateTime(latestLinkCode!.expiresAt)}',
+                    '到期：${_formatDateTime(latestLinkCode!.expiresAt)}',
                     style: theme.textTheme.bodyMedium,
                   ),
                   if (latestLinkCode!.expiresIn != null) ...[
@@ -563,10 +360,7 @@ class _BoundBlindUsersCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           if (blindUsers.isEmpty && !isLoading)
-            Text(
-              '暂无已绑定的盲人用户。生成授权码并在盲人端完成首次绑定后，这里会显示列表和最新定位。',
-              style: theme.textTheme.bodyLarge,
-            )
+            Text('暂无已绑定用户。完成首次绑定后，这里会显示列表。', style: theme.textTheme.bodyLarge)
           else
             Column(
               children: [
@@ -595,6 +389,9 @@ class _BlindUserTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final location = blindUser.latestLocation;
+    final locationText = location == null
+        ? '暂无定位'
+        : '最近定位 ${location.latitude.toStringAsFixed(5)}, ${location.longitude.toStringAsFixed(5)}';
 
     return InkWell(
       borderRadius: BorderRadius.circular(18),
@@ -623,24 +420,10 @@ class _BlindUserTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    blindUser.deviceLabel ?? '未填写设备名称',
+                    '最近在线：${_formatDateTime(blindUser.lastSeenAt)}',
                     style: theme.textTheme.bodyMedium,
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '绑定时间：${_formatDateTime(blindUser.linkedAt)}',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  Text(
-                    '最近在线：${_formatDateTime(blindUser.lastSeenAt)}',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  Text(
-                    location == null
-                        ? '暂无定位'
-                        : '最近定位：${location.latitude.toStringAsFixed(5)}, ${location.longitude.toStringAsFixed(5)}',
-                    style: theme.textTheme.bodySmall,
-                  ),
+                  Text(locationText, style: theme.textTheme.bodySmall),
                 ],
               ),
             ),
@@ -683,95 +466,6 @@ class _BentoCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(24),
       clipBehavior: Clip.antiAlias,
       child: Padding(padding: const EdgeInsets.all(20), child: child),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Widget? trailing;
-
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.trailing,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: theme.colorScheme.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: theme.textTheme.bodySmall),
-                Text(
-                  value,
-                  style: theme.textTheme.bodyLarge,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          ?trailing,
-        ],
-      ),
-    );
-  }
-}
-
-class _BentoActionTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final Color onColor;
-  final VoidCallback onTap;
-
-  const _BentoActionTile({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onColor,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(24),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, size: 28, color: onColor),
-              const Spacer(),
-              Text(
-                label,
-                style: TextStyle(
-                  color: onColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
