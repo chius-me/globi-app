@@ -32,7 +32,7 @@ pipeline {
                   -e PUB_HOSTED_URL='https://pub.flutter-io.cn' \\
                   -e FLUTTER_STORAGE_BASE_URL='https://storage.flutter-io.cn' \\
                   -w /workspace \\
-                  cirrusci/flutter:stable \\
+                  ghcr.io/cirruslabs/flutter:stable \\
                   bash -c "
                     echo '=== 环境检查 ===' &&
                     flutter --version &&
