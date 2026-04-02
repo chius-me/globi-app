@@ -29,6 +29,8 @@ pipeline {
                   -v "${WORKSPACE}:/workspace" \\
                   -v "/var/lib/jenkins/.gradle_cache:/root/.gradle" \\
                   -v "/var/lib/jenkins/.pub_cache:/root/.pub-cache" \\
+                  -e HTTP_PROXY="http://Clash:AYmOkhoZ@10.0.0.1:7890" \\
+                  -e HTTPS_PROXY="http://Clash:AYmOkhoZ@10.0.0.1:7890" \\
                   -e PUB_HOSTED_URL='https://pub.flutter-io.cn' \\
                   -e FLUTTER_STORAGE_BASE_URL='https://storage.flutter-io.cn' \\
                   -w /workspace \\
