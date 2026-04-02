@@ -1,14 +1,12 @@
 pipeline {
-    agent any // 在宿主机执行
+    agent any
 
     options {
         timestamps()
-        // 保持构建的最大个数，防止历史记录塞满磁盘
         buildDiscarder(logRotator(numToKeepStr: '10', artifactNumToKeepStr: '10'))
     }
 
     environment {
-        // Gitea 凭据及变量
         GITEA_TOKEN = credentials('gitea-api-token')
         GITEA_URL = 'http://10.0.0.131:3000'
         REPO_OWNER = 'chius'
@@ -21,7 +19,6 @@ pipeline {
     stages {
         stage('Docker Build APK') {
             steps {
-                // 使用原生的 docker run 命令
                 sh '''
                 echo "启动 Flutter 编译容器..."
                 docker run --rm \\
@@ -46,6 +43,7 @@ systemProp.https.proxyHost=10.0.0.1
 systemProp.https.proxyPort=7890
 systemProp.https.proxyUser=Clash
 systemProp.https.proxyPassword=AYmOkhoZ
+systemProp.jdk.http.auth.tunneling.disabledSchemes=
 EOF
 
                     echo '=== 环境检查 ==='
@@ -55,16 +53,13 @@ EOF
                     flutter pub get
                     
                     echo '=== 开始构建 ==='
-                    # 去掉 &&，确保命令即使失败也会继续往下走
                     flutter build apk --release
                     
-                    # 记录真实构建状态
                     BUILD_STATUS=\\$?
                     
                     echo '=== 修复权限 (无论成功失败都会执行) ==='
                     chmod -R 777 /workspace/build /workspace/.dart_tool 2>/dev/null || true
                     
-                    # 返回真实状态给 Jenkins
                     exit \\$BUILD_STATUS
                   "
                 '''
@@ -84,7 +79,6 @@ EOF
                         error("APK 文件不存在: ${env.APK_PATH}")
                     }
 
-                    // 准备 Release 信息
                     def createReleaseJson = groovy.json.JsonOutput.toJson([
                         tag_name: env.TAG_NAME,
                         target_commitish: env.TARGET_COMMITISH,
@@ -94,7 +88,6 @@ EOF
                         prerelease: false,
                     ])
 
-                    // 创建 Release
                     def response = sh(
                         script: """
                             curl --fail --silent --show-error -X POST '${env.GITEA_URL}/api/v1/repos/${env.REPO_OWNER}/${env.REPO_NAME}/releases' \
@@ -105,14 +98,12 @@ EOF
                         returnStdout: true,
                     ).trim()
 
-                    // 解析 Release ID
                     def props = new groovy.json.JsonSlurperClassic().parseText(response)
                     def releaseId = props.id
                     if (!releaseId) {
                         error("创建 Gitea Release 失败，响应内容: ${response}")
                     }
 
-                    // 上传 APK 附件 (已修复为 assets 接口)
                     sh """
                         curl --fail --silent --show-error -X POST '${env.GITEA_URL}/api/v1/repos/${env.REPO_OWNER}/${env.REPO_NAME}/releases/${releaseId}/assets' \
                           -H 'Authorization: token ${env.GITEA_TOKEN}' \
@@ -126,10 +117,7 @@ EOF
 
     post {
         always {
-            // 1. 将构建产物归档到 Jenkins 面板，方便直接下载
             archiveArtifacts artifacts: 'build/app/outputs/flutter-apk/*.apk', allowEmptyArchive: true
-            
-            // 2. 阅后即焚：清理占用磁盘极大的编译缓存目录，保持宿主机干净
             sh '''
             echo "清理工作空间冗余文件..."
             rm -rf build/ .dart_tool/
