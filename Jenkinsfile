@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    parameters {
+        string(name: 'FLUTTER_HOME', defaultValue: '/opt/flutter', description: 'Flutter SDK 根目录，例如 /opt/flutter 或 C:/src/flutter')
+    }
+
     options {
         timestamps()
     }
@@ -20,10 +24,22 @@ pipeline {
         stage('Prepare') {
             steps {
                 script {
+                    def flutterCommand = isUnix()
+                        ? "${params.FLUTTER_HOME}/bin/flutter"
+                        : "${params.FLUTTER_HOME}\\bin\\flutter.bat"
+
+                    env.FLUTTER_CMD = flutterCommand
+
                     if (isUnix()) {
-                        sh 'flutter --version'
+                        if (!fileExists(flutterCommand)) {
+                            error("未找到 Flutter SDK，请检查 Jenkins 参数 FLUTTER_HOME。当前路径: ${flutterCommand}")
+                        }
+                        sh "'${env.FLUTTER_CMD}' --version"
                     } else {
-                        pwsh 'flutter --version'
+                        if (!fileExists(flutterCommand)) {
+                            error("未找到 Flutter SDK，请检查 Jenkins 参数 FLUTTER_HOME。当前路径: ${flutterCommand}")
+                        }
+                        pwsh "& '${env.FLUTTER_CMD}' --version"
                     }
                 }
             }
@@ -33,9 +49,9 @@ pipeline {
             steps {
                 script {
                     if (isUnix()) {
-                        sh 'flutter pub get'
+                        sh "'${env.FLUTTER_CMD}' pub get"
                     } else {
-                        pwsh 'flutter pub get'
+                        pwsh "& '${env.FLUTTER_CMD}' pub get"
                     }
                 }
             }
@@ -45,9 +61,9 @@ pipeline {
             steps {
                 script {
                     if (isUnix()) {
-                        sh 'flutter analyze'
+                        sh "'${env.FLUTTER_CMD}' analyze"
                     } else {
-                        pwsh 'flutter analyze'
+                        pwsh "& '${env.FLUTTER_CMD}' analyze"
                     }
                 }
             }
@@ -57,9 +73,9 @@ pipeline {
             steps {
                 script {
                     if (isUnix()) {
-                        sh 'flutter test'
+                        sh "'${env.FLUTTER_CMD}' test"
                     } else {
-                        pwsh 'flutter test'
+                        pwsh "& '${env.FLUTTER_CMD}' test"
                     }
                 }
             }
@@ -69,9 +85,9 @@ pipeline {
             steps {
                 script {
                     if (isUnix()) {
-                        sh 'flutter build apk --release'
+                        sh "'${env.FLUTTER_CMD}' build apk --release"
                     } else {
-                        pwsh 'flutter build apk --release'
+                        pwsh "& '${env.FLUTTER_CMD}' build apk --release"
                     }
                 }
             }
