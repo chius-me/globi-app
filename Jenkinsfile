@@ -93,7 +93,7 @@ pipeline {
 
                     // 上传 APK 附件
                     sh """
-                        curl --fail --silent --show-error -X POST '${env.GITEA_URL}/api/v1/repos/${env.REPO_OWNER}/${env.REPO_NAME}/releases/${releaseId}/attachments' \
+                        curl --fail --silent --show-error -X POST '${env.GITEA_URL}/api/v1/repos/${env.REPO_OWNER}/${env.REPO_NAME}/releases/${releaseId}/assets' \
                           -H 'Authorization: token ${env.GITEA_TOKEN}' \
                           -H 'Accept: application/json' \
                           -F 'attachment=@${env.APK_PATH}'
