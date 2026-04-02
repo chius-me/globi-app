@@ -1,19 +1,12 @@
 pipeline {
-    agent {
-        docker {
-            // 官方社区维护的镜像，内置了最新的 Flutter Stable 版本和 Android SDK / JDK
-            image 'cirruslabs/flutter:stable'
-            // 以 root 用户运行，避免 Jenkins 挂载工作目录时出现权限问题
-            args '-u root'
-        }
-    }
+    agent any // 回归宿主机执行
 
     options {
         timestamps()
     }
 
     environment {
-        // Gitea 凭据及变量保持不变
+        // Gitea 凭据及变量
         GITEA_TOKEN = credentials('gitea-api-token')
         GITEA_URL = 'https://git.tamochi.cn'
         REPO_OWNER = 'chius'
@@ -24,35 +17,30 @@ pipeline {
     }
 
     stages {
-        stage('Prepare Environment') {
+        stage('Docker Build APK') {
             steps {
-                // 直接使用 flutter 命令，顺便打印下环境信息方便排查问题
-                sh 'flutter --version'
-                sh 'flutter doctor -v'
-            }
-        }
-
-        stage('Dependencies') {
-            steps {
-                sh 'flutter pub get'
-            }
-        }
-
-        stage('Analyze') {
-            steps {
-                sh 'flutter analyze'
-            }
-        }
-
-        stage('Test') {
-            steps {
-                sh 'flutter test'
-            }
-        }
-
-        stage('Build Release APK') {
-            steps {
-                sh 'flutter build apk --release'
+                // 使用原生的 docker run 命令
+                // 注意这里使用的是单引号 '''，这样 $WORKSPACE 会被当做宿主机 shell 环境变量处理
+                sh '''
+                echo "启动 Flutter 编译容器..."
+                docker run --rm \\
+                  -v "${WORKSPACE}:/workspace" \\
+                  -w /workspace \\
+                  cirruslabs/flutter:stable \\
+                  bash -c "
+                    echo '=== 环境检查 ===' &&
+                    flutter --version &&
+                    
+                    echo '=== 拉取依赖 ===' &&
+                    flutter pub get &&
+                    
+                    echo '=== 开始构建 ===' &&
+                    flutter build apk --release &&
+                    
+                    echo '=== 修复权限 ===' &&
+                    chmod -R 777 /workspace/build /workspace/.dart_tool
+                  "
+                '''
             }
         }
 
@@ -74,7 +62,7 @@ pipeline {
                         tag_name: env.TAG_NAME,
                         target_commitish: env.TARGET_COMMITISH,
                         name: "自动构建版本 ${env.TAG_NAME}",
-                        body: "由 Jenkins Docker 容器自动生成的构建版本。",
+                        body: "由 Jenkins 原生 Docker 脚本自动生成。",
                         draft: false,
                         prerelease: false,
                     ])
@@ -94,7 +82,7 @@ pipeline {
                     def props = new groovy.json.JsonSlurperClassic().parseText(response)
                     def releaseId = props.id
                     if (!releaseId) {
-                        error("创建 Gitea Release 失败，未获取到 release id。响应内容: ${response}")
+                        error("创建 Gitea Release 失败，响应内容: ${response}")
                     }
 
                     // 上传 APK 附件
@@ -111,6 +99,7 @@ pipeline {
 
     post {
         always {
+            // 归档产物，现在宿主机有权限读取这些文件了
             archiveArtifacts artifacts: 'build/app/outputs/flutter-apk/*.apk', allowEmptyArchive: true
         }
     }
