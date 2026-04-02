@@ -96,6 +96,8 @@ if [ ! -f "$NDK_DIR/source.properties" ]; then
     echo "NDK 目录无效: $NDK_DIR"
     exit 1
 fi
+echo "使用 NDK 目录: $NDK_DIR"
+grep '^Pkg.Revision=' "$NDK_DIR/source.properties" || true
 
 echo '=== 修正 Android local.properties ==='
 FLUTTER_BIN="$(command -v flutter)"
@@ -105,7 +107,6 @@ FLUTTER_VERSION_NAME="$(grep '^flutter.versionName=' android/local.properties 2>
 FLUTTER_VERSION_CODE="$(grep '^flutter.versionCode=' android/local.properties 2>/dev/null | cut -d= -f2- || true)"
 cat > android/local.properties <<LOCAL_PROPERTIES_EOF
 sdk.dir=$ANDROID_HOME
-ndk.dir=$NDK_DIR
 flutter.sdk=$FLUTTER_ROOT
 flutter.buildMode=release
 flutter.versionName=${FLUTTER_VERSION_NAME:-1.0.0}
