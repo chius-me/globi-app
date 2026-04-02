@@ -16,6 +16,7 @@ pipeline {
         TAG_NAME = "v${env.BUILD_NUMBER}"
         TARGET_COMMITISH = "${env.BRANCH_NAME ?: 'main'}"
         APK_PATH = 'build/app/outputs/flutter-apk/app-release.apk'
+        NDK_VERSION = '27.0.12077973'
     }
 
     stages {
@@ -29,19 +30,22 @@ pipeline {
                   -v "/var/lib/jenkins/.pub_cache:/root/.pub-cache" \\
                   -e HTTP_PROXY="http://Clash:AYmOkhoZ@10.0.0.1:7890" \\
                   -e HTTPS_PROXY="http://Clash:AYmOkhoZ@10.0.0.1:7890" \\
+                  -e NDK_VERSION="${NDK_VERSION}" \\
                   -e PUB_HOSTED_URL='https://pub.flutter-io.cn' \\
                   -e FLUTTER_STORAGE_BASE_URL='https://storage.flutter-io.cn' \\
                   -w /workspace \\
                   ghcr.io/cirruslabs/flutter:stable \\
-                  bash -c "
-                    echo '=== 强制注入 JVM 底层参数 ==='
-                    # 确保 Java 在启动的第一时间就允许 HTTP 代理隧道传递密码，并全局注入代理认证信息
-                    export _JAVA_OPTIONS=\"-Djdk.http.auth.tunneling.disabledSchemes= -Djdk.http.auth.proxying.disabledSchemes= -Dhttp.proxyHost=10.0.0.1 -Dhttp.proxyPort=7890 -Dhttp.proxyUser=Clash -Dhttp.proxyPassword=AYmOkhoZ -Dhttps.proxyHost=10.0.0.1 -Dhttps.proxyPort=7890 -Dhttps.proxyUser=Clash -Dhttps.proxyPassword=AYmOkhoZ\"
-                    export GRADLE_OPTS=\"-Djdk.http.auth.tunneling.disabledSchemes= -Djdk.http.auth.proxying.disabledSchemes=\"
+                  bash <<'EOF'
+set -e
 
-                    echo '=== 强制配置 Java/Gradle 专属代理 ==='
-                    mkdir -p /root/.gradle
-                    cat <<EOF > /root/.gradle/gradle.properties
+echo '=== 强制注入 JVM 底层参数 ==='
+# 确保 Java 在启动的第一时间就允许 HTTP 代理隧道传递密码，并全局注入代理认证信息
+export _JAVA_OPTIONS='-Djdk.http.auth.tunneling.disabledSchemes= -Djdk.http.auth.proxying.disabledSchemes= -Dhttp.proxyHost=10.0.0.1 -Dhttp.proxyPort=7890 -Dhttp.proxyUser=Clash -Dhttp.proxyPassword=AYmOkhoZ -Dhttps.proxyHost=10.0.0.1 -Dhttps.proxyPort=7890 -Dhttps.proxyUser=Clash -Dhttps.proxyPassword=AYmOkhoZ'
+export GRADLE_OPTS='-Djdk.http.auth.tunneling.disabledSchemes= -Djdk.http.auth.proxying.disabledSchemes='
+
+echo '=== 强制配置 Java/Gradle 专属代理 ==='
+mkdir -p /root/.gradle
+cat <<'GRADLE_EOF' > /root/.gradle/gradle.properties
 systemProp.http.proxyHost=10.0.0.1
 systemProp.http.proxyPort=7890
 systemProp.http.proxyUser=Clash
@@ -50,25 +54,40 @@ systemProp.https.proxyHost=10.0.0.1
 systemProp.https.proxyPort=7890
 systemProp.https.proxyUser=Clash
 systemProp.https.proxyPassword=AYmOkhoZ
-org.gradle.jvmargs=-Djdk.http.auth.tunneling.disabledSchemes=
-EOF
+org.gradle.jvmargs=-Djdk.http.auth.tunneling.disabledSchemes= -Djdk.http.auth.proxying.disabledSchemes=
+GRADLE_EOF
 
-                    echo '=== 环境检查 ==='
-                    flutter --version
-                    
-                    echo '=== 拉取依赖 ==='
-                    flutter pub get
-                    
-                    echo '=== 开始构建 ==='
-                    flutter build apk --release
-                    
-                    BUILD_STATUS=\\$?
-                    
-                    echo '=== 修复权限 (无论成功失败都会执行) ==='
-                    chmod -R 777 /workspace/build /workspace/.dart_tool 2>/dev/null || true
-                    
-                    exit \\$BUILD_STATUS
-                  "
+echo '=== 准备 Android SDK / NDK ==='
+export ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+SDKMANAGER_BIN="$(command -v sdkmanager || true)"
+if [ -z "$SDKMANAGER_BIN" ] && [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+    SDKMANAGER_BIN="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+fi
+if [ -z "$SDKMANAGER_BIN" ]; then
+    echo 'sdkmanager 未找到，无法安装 NDK'
+    exit 1
+fi
+yes | "$SDKMANAGER_BIN" --licenses > /dev/null || true
+yes | "$SDKMANAGER_BIN" "ndk;${NDK_VERSION}"
+
+echo '=== 环境检查 ==='
+flutter --version
+
+echo '=== 拉取依赖 ==='
+flutter pub get
+
+echo '=== 开始构建 ==='
+set +e
+flutter build apk --release
+BUILD_STATUS=$?
+set -e
+
+echo '=== 修复权限 (无论成功失败都会执行) ==='
+chmod -R 777 /workspace/build /workspace/.dart_tool 2>/dev/null || true
+
+exit $BUILD_STATUS
+EOF
                 '''
             }
         }
