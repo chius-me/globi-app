@@ -17,6 +17,7 @@ pipeline {
         TARGET_COMMITISH = "${env.BRANCH_NAME ?: 'main'}"
         APK_PATH = 'build/app/outputs/flutter-apk/app-release.apk'
         NDK_VERSION = '27.0.12077973'
+        NDK_DOWNLOAD_URL = 'https://dl.google.com/android/repository/android-ndk-r27-linux.zip'
     }
 
     stages {
@@ -31,6 +32,7 @@ pipeline {
                   -e HTTP_PROXY="http://Clash:AYmOkhoZ@10.0.0.1:7890" \\
                   -e HTTPS_PROXY="http://Clash:AYmOkhoZ@10.0.0.1:7890" \\
                   -e NDK_VERSION="${NDK_VERSION}" \\
+                  -e NDK_DOWNLOAD_URL="${NDK_DOWNLOAD_URL}" \\
                   -e PUB_HOSTED_URL='https://pub.flutter-io.cn' \\
                   -e FLUTTER_STORAGE_BASE_URL='https://storage.flutter-io.cn' \\
                   -w /workspace \\
@@ -60,16 +62,36 @@ GRADLE_EOF
 echo '=== 准备 Android SDK / NDK ==='
 export ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
+NDK_DIR="$ANDROID_HOME/ndk/${NDK_VERSION}"
 SDKMANAGER_BIN="$(command -v sdkmanager || true)"
 if [ -z "$SDKMANAGER_BIN" ] && [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
     SDKMANAGER_BIN="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
 fi
-if [ -z "$SDKMANAGER_BIN" ]; then
-    echo 'sdkmanager 未找到，无法安装 NDK'
-    exit 1
+if [ ! -d "$NDK_DIR" ]; then
+    if [ -n "$SDKMANAGER_BIN" ]; then
+        yes | "$SDKMANAGER_BIN" --licenses > /dev/null || true
+        if ! yes | "$SDKMANAGER_BIN" "ndk;${NDK_VERSION}"; then
+            echo 'sdkmanager 安装 NDK 失败，改为直接下载安装包'
+        fi
+    else
+        echo 'sdkmanager 未找到，改为直接下载安装包'
+    fi
 fi
-yes | "$SDKMANAGER_BIN" --licenses > /dev/null || true
-yes | "$SDKMANAGER_BIN" "ndk;${NDK_VERSION}"
+if [ ! -d "$NDK_DIR" ]; then
+    rm -rf /tmp/android-ndk-download
+    mkdir -p /tmp/android-ndk-download "$ANDROID_HOME/ndk"
+    curl --fail --location --retry 3 --output /tmp/android-ndk.zip "$NDK_DOWNLOAD_URL"
+    unzip -q /tmp/android-ndk.zip -d /tmp/android-ndk-download
+    NDK_EXTRACT_DIR="$(find /tmp/android-ndk-download -maxdepth 1 -type d -name 'android-ndk-r27*' | head -n 1)"
+    if [ -z "$NDK_EXTRACT_DIR" ]; then
+        echo 'NDK 解压目录未找到'
+        exit 1
+    fi
+    rm -rf "$NDK_DIR"
+    mv "$NDK_EXTRACT_DIR" "$NDK_DIR"
+fi
+export ANDROID_NDK_HOME="$NDK_DIR"
+export ANDROID_NDK_ROOT="$NDK_DIR"
 
 echo '=== 环境检查 ==='
 flutter --version
