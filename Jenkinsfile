@@ -1,12 +1,14 @@
 pipeline {
-    agent any
+    agent any // 在宿主机执行
 
     options {
         timestamps()
+        // 保持构建的最大个数，防止历史记录塞满磁盘
         buildDiscarder(logRotator(numToKeepStr: '10', artifactNumToKeepStr: '10'))
     }
 
     environment {
+        // Gitea 凭据及变量
         GITEA_TOKEN = credentials('gitea-api-token')
         GITEA_URL = 'http://10.0.0.131:3000'
         REPO_OWNER = 'chius'
@@ -32,6 +34,11 @@ pipeline {
                   -w /workspace \\
                   ghcr.io/cirruslabs/flutter:stable \\
                   bash -c "
+                    echo '=== 强制注入 JVM 底层参数 ==='
+                    # 确保 Java 在启动的第一时间就允许 HTTP 代理隧道传递密码
+                    export _JAVA_OPTIONS='-Djdk.http.auth.tunneling.disabledSchemes='
+                    export GRADLE_OPTS='-Djdk.http.auth.tunneling.disabledSchemes='
+
                     echo '=== 强制配置 Java/Gradle 专属代理 ==='
                     mkdir -p /root/.gradle
                     cat <<EOF > /root/.gradle/gradle.properties
@@ -43,7 +50,7 @@ systemProp.https.proxyHost=10.0.0.1
 systemProp.https.proxyPort=7890
 systemProp.https.proxyUser=Clash
 systemProp.https.proxyPassword=AYmOkhoZ
-systemProp.jdk.http.auth.tunneling.disabledSchemes=
+org.gradle.jvmargs=-Djdk.http.auth.tunneling.disabledSchemes=
 EOF
 
                     echo '=== 环境检查 ==='
