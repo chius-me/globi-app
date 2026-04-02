@@ -10,7 +10,7 @@ pipeline {
     environment {
         // Gitea 凭据及变量
         GITEA_TOKEN = credentials('gitea-api-token')
-        GITEA_URL = 'https://git.tamochi.cn'
+        GITEA_URL = 'http://10.0.0.131:2222'
         REPO_OWNER = 'chius'
         REPO_NAME = 'globi-mobile'
         TAG_NAME = "v${env.BUILD_NUMBER}"
