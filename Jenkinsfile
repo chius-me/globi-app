@@ -67,8 +67,8 @@ pipeline {
                     def createReleaseJson = groovy.json.JsonOutput.toJson([
                         tag_name: env.TAG_NAME,
                         target_commitish: env.TARGET_COMMITISH,
-                        name: "自动构建版本 ${env.TAG_NAME}",
-                        body: "由 Jenkins 原生 Docker 脚本自动生成。",
+                        name: "Globi-V APP ${env.TAG_NAME}",
+                        body: "由 Jenkins 自动生成",
                         draft: false,
                         prerelease: false,
                     ])
