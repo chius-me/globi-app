@@ -26,7 +26,7 @@ pipeline {
                 docker run --rm \\
                   -v "${WORKSPACE}:/workspace" \\
                   -w /workspace \\
-                  cirruslabs/flutter:stable \\
+                  ghcr.io/cirruslabs/flutter:stable \\
                   bash -c "
                     echo '=== 环境检查 ===' &&
                     flutter --version &&
