@@ -35,9 +35,9 @@ pipeline {
                   ghcr.io/cirruslabs/flutter:stable \\
                   bash -c "
                     echo '=== 强制注入 JVM 底层参数 ==='
-                    # 确保 Java 在启动的第一时间就允许 HTTP 代理隧道传递密码
-                    export _JAVA_OPTIONS='-Djdk.http.auth.tunneling.disabledSchemes='
-                    export GRADLE_OPTS='-Djdk.http.auth.tunneling.disabledSchemes='
+                    # 确保 Java 在启动的第一时间就允许 HTTP 代理隧道传递密码，并全局注入代理认证信息
+                    export _JAVA_OPTIONS="-Djdk.http.auth.tunneling.disabledSchemes= -Djdk.http.auth.proxying.disabledSchemes= -Dhttp.proxyHost=10.0.0.1 -Dhttp.proxyPort=7890 -Dhttp.proxyUser=Clash -Dhttp.proxyPassword=AYmOkhoZ -Dhttps.proxyHost=10.0.0.1 -Dhttps.proxyPort=7890 -Dhttps.proxyUser=Clash -Dhttps.proxyPassword=AYmOkhoZ"
+                    export GRADLE_OPTS="-Djdk.http.auth.tunneling.disabledSchemes= -Djdk.http.auth.proxying.disabledSchemes="
 
                     echo '=== 强制配置 Java/Gradle 专属代理 ==='
                     mkdir -p /root/.gradle
