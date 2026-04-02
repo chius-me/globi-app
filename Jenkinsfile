@@ -35,7 +35,7 @@ pipeline {
                     flutter pub get &&
                     
                     echo '=== 开始构建 ===' &&
-                    flutter build apk --release &&
+                    flutter build apk --release -v &&
                     
                     echo '=== 修复权限 ===' &&
                     chmod -R 777 /workspace/build /workspace/.dart_tool
