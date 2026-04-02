@@ -1,8 +1,10 @@
 pipeline {
-    agent any // 回归宿主机执行
+    agent any // 在宿主机执行
 
     options {
         timestamps()
+        // 保持构建的最大个数，防止历史记录塞满磁盘
+        buildDiscarder(logRotator(numToKeepStr: '10', artifactNumToKeepStr: '10'))
     }
 
     environment {
@@ -20,13 +22,17 @@ pipeline {
         stage('Docker Build APK') {
             steps {
                 // 使用原生的 docker run 命令
-                // 注意这里使用的是单引号 '''，这样 $WORKSPACE 会被当做宿主机 shell 环境变量处理
+                // 结合了国内镜像源、持久化缓存挂载，极大提升二次构建速度
                 sh '''
                 echo "启动 Flutter 编译容器..."
                 docker run --rm \\
                   -v "${WORKSPACE}:/workspace" \\
+                  -v "/var/lib/jenkins/.gradle_cache:/root/.gradle" \\
+                  -v "/var/lib/jenkins/.pub_cache:/root/.pub-cache" \\
+                  -e PUB_HOSTED_URL='https://pub.flutter-io.cn' \\
+                  -e FLUTTER_STORAGE_BASE_URL='https://storage.flutter-io.cn' \\
                   -w /workspace \\
-                  ghcr.io/cirruslabs/flutter:stable \\
+                  cirrusci/flutter:stable \\
                   bash -c "
                     echo '=== 环境检查 ===' &&
                     flutter --version &&
@@ -35,7 +41,7 @@ pipeline {
                     flutter pub get &&
                     
                     echo '=== 开始构建 ===' &&
-                    flutter build apk --release -v &&
+                    flutter build apk --release &&
                     
                     echo '=== 修复权限 ===' &&
                     chmod -R 777 /workspace/build /workspace/.dart_tool
@@ -78,7 +84,7 @@ pipeline {
                         returnStdout: true,
                     ).trim()
 
-                    // 解析 Release ID
+                    // 解析 Release ID（你在上一步已经通过了脚本安全审批，这里会直接放行）
                     def props = new groovy.json.JsonSlurperClassic().parseText(response)
                     def releaseId = props.id
                     if (!releaseId) {
@@ -99,8 +105,14 @@ pipeline {
 
     post {
         always {
-            // 归档产物，现在宿主机有权限读取这些文件了
+            // 1. 将构建产物归档到 Jenkins 面板，方便直接下载
             archiveArtifacts artifacts: 'build/app/outputs/flutter-apk/*.apk', allowEmptyArchive: true
+            
+            // 2. 阅后即焚：清理占用磁盘极大的编译缓存目录，保持宿主机干净
+            sh '''
+            echo "清理工作空间冗余文件..."
+            rm -rf build/ .dart_tool/
+            '''
         }
     }
 }
