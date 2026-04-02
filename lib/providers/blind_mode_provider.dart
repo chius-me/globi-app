@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../models/blind_identity.dart';
 import '../models/blind_link_result.dart';
@@ -31,6 +32,8 @@ class BlindModeProvider extends ChangeNotifier {
   bool _trackingEnabled = false;
   Timer? _uploadTimer;
   Future<void>? _initializeFuture;
+
+  StreamSubscription<Position>? _positionStreamSubscription;
 
   BlindModeProvider({
     required BlindLinkApiService blindApi,
@@ -163,9 +166,28 @@ class BlindModeProvider extends ChangeNotifier {
 
     _trackingEnabled = true;
     _uploadTimer?.cancel();
+    _positionStreamSubscription?.cancel();
+
+    // Start a periodic fallback timer just in case movement isn't detected for a long time
     _uploadTimer = Timer.periodic(locationUploadInterval, (_) {
       unawaited(uploadCurrentLocation());
     });
+
+    // Start real-time movement tracking
+    try {
+      _positionStreamSubscription = _locationService
+          .getPositionStream(distanceFilter: 10)
+          .listen(
+            (position) {
+              unawaited(_uploadPosition(position, silentErrors: true));
+            },
+            onError: (dynamic error) {
+              debugPrint('Location stream error: $error');
+            },
+          );
+    } catch (_) {
+      // Ignore if permission denied immediately, fallback timer handles it
+    }
 
     await uploadCurrentLocation(silentErrors: _lastUploadedLocation != null);
   }
@@ -174,12 +196,33 @@ class BlindModeProvider extends ChangeNotifier {
     _trackingEnabled = false;
     _uploadTimer?.cancel();
     _uploadTimer = null;
+    _positionStreamSubscription?.cancel();
+    _positionStreamSubscription = null;
   }
 
   Future<void> uploadCurrentLocation({bool silentErrors = true}) async {
     if (!isLinked || _isUploadingLocation) {
       return;
     }
+    _isUploadingLocation = true;
+    notifyListeners();
+
+    try {
+      final position = await _locationService.getCurrentPosition();
+      await _uploadPosition(position, silentErrors: silentErrors);
+    } catch (error) {
+      _handleUploadError(error, silentErrors);
+    } finally {
+      _isUploadingLocation = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _uploadPosition(
+    Position position, {
+    bool silentErrors = true,
+  }) async {
+    if (!isLinked) return;
 
     final blindAccessToken = await _storage.getBlindAccessToken();
     if (blindAccessToken == null || blindAccessToken.isEmpty) {
@@ -187,14 +230,11 @@ class BlindModeProvider extends ChangeNotifier {
       return;
     }
 
-    _isUploadingLocation = true;
     if (!silentErrors) {
       _errorMessage = null;
     }
-    notifyListeners();
 
     try {
-      final position = await _locationService.getCurrentPosition();
       final location = BlindLocation(
         latitude: position.latitude,
         longitude: position.longitude,
@@ -216,20 +256,23 @@ class BlindModeProvider extends ChangeNotifier {
         updatedAt: result.updatedAt ?? result.recordedAt,
       );
       _errorMessage = null;
-    } catch (error) {
-      if (isUnauthorizedError(error)) {
-        await _clearBlindAuthorization(errorMessage: '盲人授权已失效，请重新输入授权码。');
-      } else {
-        final message = error is LocationServiceException
-            ? error.message
-            : resolveApiErrorMessage(error, fallback: '定位上传失败，请稍后再试。');
-        if (!silentErrors || _lastUploadedLocation == null) {
-          _errorMessage = message;
-        }
-      }
-    } finally {
-      _isUploadingLocation = false;
       notifyListeners();
+    } catch (error) {
+      _handleUploadError(error, silentErrors);
+    }
+  }
+
+  void _handleUploadError(dynamic error, bool silentErrors) {
+    if (isUnauthorizedError(error)) {
+      unawaited(_clearBlindAuthorization(errorMessage: '盲人授权已失效，请重新输入授权码。'));
+    } else {
+      final message = error is LocationServiceException
+          ? error.message
+          : resolveApiErrorMessage(error, fallback: '定位上传失败，请稍后再试。');
+      if (!silentErrors || _lastUploadedLocation == null) {
+        _errorMessage = message;
+        notifyListeners();
+      }
     }
   }
 

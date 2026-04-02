@@ -11,6 +11,26 @@ class LocationServiceException implements Exception {
 
 class LocationService {
   Future<Position> getCurrentPosition() async {
+    await _checkPermissions();
+    return Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
+    );
+  }
+
+  Stream<Position> getPositionStream({
+    LocationAccuracy accuracy = LocationAccuracy.best,
+    int distanceFilter = 10,
+  }) async* {
+    await _checkPermissions();
+    yield* Geolocator.getPositionStream(
+      locationSettings: LocationSettings(
+        accuracy: accuracy,
+        distanceFilter: distanceFilter,
+      ),
+    );
+  }
+
+  Future<void> _checkPermissions() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       throw const LocationServiceException('定位服务未开启，请先打开系统定位服务。');
@@ -28,10 +48,6 @@ class LocationService {
     if (permission == LocationPermission.deniedForever) {
       throw const LocationServiceException('定位权限已被永久拒绝，请前往系统设置开启。');
     }
-
-    return Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
-    );
   }
 
   Future<bool> openAppSettings() {
