@@ -22,7 +22,6 @@ pipeline {
         stage('Docker Build APK') {
             steps {
                 // 使用原生的 docker run 命令
-                // 结合了国内镜像源、持久化缓存挂载，极大提升二次构建速度
                 sh '''
                 echo "启动 Flutter 编译容器..."
                 docker run --rm \\
@@ -36,17 +35,37 @@ pipeline {
                   -w /workspace \\
                   ghcr.io/cirruslabs/flutter:stable \\
                   bash -c "
-                    echo '=== 环境检查 ===' &&
-                    flutter --version &&
+                    echo '=== 强制配置 Java/Gradle 专属代理 ==='
+                    mkdir -p /root/.gradle
+                    cat <<EOF > /root/.gradle/gradle.properties
+systemProp.http.proxyHost=10.0.0.1
+systemProp.http.proxyPort=7890
+systemProp.http.proxyUser=Clash
+systemProp.http.proxyPassword=AYmOkhoZ
+systemProp.https.proxyHost=10.0.0.1
+systemProp.https.proxyPort=7890
+systemProp.https.proxyUser=Clash
+systemProp.https.proxyPassword=AYmOkhoZ
+EOF
+
+                    echo '=== 环境检查 ==='
+                    flutter --version
                     
-                    echo '=== 拉取依赖 ===' &&
-                    flutter pub get &&
+                    echo '=== 拉取依赖 ==='
+                    flutter pub get
                     
-                    echo '=== 开始构建 ===' &&
-                    flutter build apk --release &&
+                    echo '=== 开始构建 ==='
+                    # 去掉 &&，确保命令即使失败也会继续往下走
+                    flutter build apk --release
                     
-                    echo '=== 修复权限 ===' &&
-                    chmod -R 777 /workspace/build /workspace/.dart_tool
+                    # 记录真实构建状态
+                    BUILD_STATUS=\\$?
+                    
+                    echo '=== 修复权限 (无论成功失败都会执行) ==='
+                    chmod -R 777 /workspace/build /workspace/.dart_tool 2>/dev/null || true
+                    
+                    # 返回真实状态给 Jenkins
+                    exit \\$BUILD_STATUS
                   "
                 '''
             }
@@ -86,14 +105,14 @@ pipeline {
                         returnStdout: true,
                     ).trim()
 
-                    // 解析 Release ID（你在上一步已经通过了脚本安全审批，这里会直接放行）
+                    // 解析 Release ID
                     def props = new groovy.json.JsonSlurperClassic().parseText(response)
                     def releaseId = props.id
                     if (!releaseId) {
                         error("创建 Gitea Release 失败，响应内容: ${response}")
                     }
 
-                    // 上传 APK 附件
+                    // 上传 APK 附件 (已修复为 assets 接口)
                     sh """
                         curl --fail --silent --show-error -X POST '${env.GITEA_URL}/api/v1/repos/${env.REPO_OWNER}/${env.REPO_NAME}/releases/${releaseId}/assets' \
                           -H 'Authorization: token ${env.GITEA_TOKEN}' \
