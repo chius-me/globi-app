@@ -24,7 +24,7 @@ pipeline {
             steps {
                 sh '''
                 echo "启动 Flutter 编译容器..."
-                docker run --rm \\
+                docker run --rm -i \\
                   -v "${WORKSPACE}:/workspace" \\
                   -v "/var/lib/jenkins/.gradle_cache:/root/.gradle" \\
                   -v "/var/lib/jenkins/.pub_cache:/root/.pub-cache" \\
@@ -35,7 +35,7 @@ pipeline {
                   -e FLUTTER_STORAGE_BASE_URL='https://storage.flutter-io.cn' \\
                   -w /workspace \\
                   ghcr.io/cirruslabs/flutter:stable \\
-                  bash <<'EOF'
+                  bash -se <<'EOF'
 set -e
 
 echo '=== 强制注入 JVM 底层参数 ==='
