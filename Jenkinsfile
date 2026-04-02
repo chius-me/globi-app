@@ -92,6 +92,24 @@ if [ ! -d "$NDK_DIR" ]; then
 fi
 export ANDROID_NDK_HOME="$NDK_DIR"
 export ANDROID_NDK_ROOT="$NDK_DIR"
+if [ ! -f "$NDK_DIR/source.properties" ]; then
+    echo "NDK 目录无效: $NDK_DIR"
+    exit 1
+fi
+
+echo '=== 修正 Android local.properties ==='
+FLUTTER_BIN="$(command -v flutter)"
+FLUTTER_BIN="$(readlink -f "$FLUTTER_BIN" 2>/dev/null || echo "$FLUTTER_BIN")"
+FLUTTER_ROOT="$(dirname "$(dirname "$FLUTTER_BIN")")"
+FLUTTER_VERSION_NAME="$(grep '^flutter.versionName=' android/local.properties 2>/dev/null | cut -d= -f2- || true)"
+FLUTTER_VERSION_CODE="$(grep '^flutter.versionCode=' android/local.properties 2>/dev/null | cut -d= -f2- || true)"
+cat > android/local.properties <<LOCAL_PROPERTIES_EOF
+sdk.dir=$ANDROID_HOME
+flutter.sdk=$FLUTTER_ROOT
+flutter.buildMode=release
+flutter.versionName=${FLUTTER_VERSION_NAME:-1.0.0}
+flutter.versionCode=${FLUTTER_VERSION_CODE:-1}
+LOCAL_PROPERTIES_EOF
 
 echo '=== 环境检查 ==='
 flutter --version
