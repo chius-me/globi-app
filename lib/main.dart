@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:app_links/app_links.dart';
 import 'package:dio/dio.dart';
 import 'package:dynamic_color/dynamic_color.dart';
+import 'config/app_theme.dart';
 import 'config/navigation.dart';
 import 'config/constants.dart';
 import 'providers/app_mode_provider.dart';
@@ -195,8 +196,8 @@ class _GlobiAppState extends State<GlobiApp> {
           title: 'Globi',
           debugShowCheckedModeBanner: false,
           navigatorObservers: [appRouteObserver],
-          theme: ThemeData(colorScheme: lightScheme, useMaterial3: true),
-          darkTheme: ThemeData(colorScheme: darkScheme, useMaterial3: true),
+          theme: AppTheme.lightTheme(lightScheme),
+          darkTheme: AppTheme.darkTheme(darkScheme),
           home: Consumer3<AppModeProvider, AuthProvider, BlindModeProvider>(
             builder: (context, appMode, auth, blindMode, _) {
               switch (appMode.mode) {
