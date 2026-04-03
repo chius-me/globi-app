@@ -6,11 +6,16 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/constants.dart';
 import '../models/auth_config.dart';
 import '../models/current_user.dart';
+import '../models/family_profile.dart';
+import '../models/family_profile_bootstrap.dart';
 import '../services/auth_api_service.dart';
 import '../services/secure_storage_service.dart';
+import '../utils/api_error.dart';
 import '../utils/pkce.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
+
+enum FamilyProfileStatus { unknown, loading, incomplete, complete, error }
 
 class AuthProvider extends ChangeNotifier {
   final AuthApiService _authApi;
@@ -24,6 +29,10 @@ class AuthProvider extends ChangeNotifier {
   Future<void>? _initializeFuture;
   String? _privateMessage;
   Map<String, dynamic>? _privateUserInfo;
+  FamilyProfileBootstrap? _familyProfileBootstrap;
+  FamilyProfileStatus _familyProfileStatus = FamilyProfileStatus.unknown;
+  String? _familyProfileErrorMessage;
+  bool _isSavingFamilyProfile = false;
 
   // PKCE session state
   Pkce? _pendingPkce;
@@ -36,6 +45,14 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _status == AuthStatus.authenticated;
   String? get privateMessage => _privateMessage;
   Map<String, dynamic>? get privateUserInfo => _privateUserInfo;
+  FamilyProfileBootstrap? get familyProfileBootstrap => _familyProfileBootstrap;
+  FamilyProfileStatus get familyProfileStatus => _familyProfileStatus;
+  String? get familyProfileErrorMessage => _familyProfileErrorMessage;
+  bool get isSavingFamilyProfile => _isSavingFamilyProfile;
+  bool get isLoadingFamilyProfile =>
+      _familyProfileStatus == FamilyProfileStatus.loading;
+  bool get isFamilyProfileCompleted =>
+      _familyProfileStatus == FamilyProfileStatus.complete;
 
   AuthProvider({
     required AuthApiService authApi,
@@ -127,7 +144,9 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _hydrateAuthenticatedSession({required String accessToken}) async {
+  Future<void> _hydrateAuthenticatedSession({
+    required String accessToken,
+  }) async {
     _user = await _authApi.getMe(accessToken: accessToken);
 
     try {
@@ -139,8 +158,95 @@ class AuthProvider extends ChangeNotifier {
       _privateUserInfo = null;
     }
 
+    await _loadFamilyProfileBootstrap();
+
     _status = AuthStatus.authenticated;
     notifyListeners();
+  }
+
+  Future<void> _loadFamilyProfileBootstrap() async {
+    _familyProfileStatus = FamilyProfileStatus.loading;
+    _familyProfileErrorMessage = null;
+
+    try {
+      final bootstrap = await _authApi.getFamilyProfileBootstrap();
+      _familyProfileBootstrap = bootstrap;
+      _familyProfileStatus = bootstrap.profileCompleted
+          ? FamilyProfileStatus.complete
+          : FamilyProfileStatus.incomplete;
+    } catch (error) {
+      _familyProfileBootstrap = null;
+      _familyProfileStatus = FamilyProfileStatus.error;
+      _familyProfileErrorMessage = resolveApiErrorMessage(
+        error,
+        fallback: '家属资料状态加载失败，请重试。',
+      );
+    }
+  }
+
+  Future<void> refreshFamilyProfileBootstrap() async {
+    if (_status != AuthStatus.authenticated) {
+      return;
+    }
+
+    _familyProfileStatus = FamilyProfileStatus.loading;
+    _familyProfileErrorMessage = null;
+    notifyListeners();
+
+    await _loadFamilyProfileBootstrap();
+    notifyListeners();
+  }
+
+  Future<bool> saveFamilyProfile({
+    required String email,
+    required String phone,
+    required String name,
+  }) async {
+    final trimmedEmail = email.trim();
+    final trimmedPhone = phone.trim();
+    final trimmedName = name.trim();
+
+    if (trimmedEmail.isEmpty ||
+        trimmedPhone.isEmpty ||
+        trimmedName.isEmpty ||
+        _isSavingFamilyProfile) {
+      _familyProfileErrorMessage = '请完整填写邮箱、电话和姓名。';
+      notifyListeners();
+      return false;
+    }
+
+    _isSavingFamilyProfile = true;
+    _familyProfileErrorMessage = null;
+    notifyListeners();
+
+    try {
+      await _authApi.saveFamilyProfile(
+        email: trimmedEmail,
+        phone: trimmedPhone,
+        name: trimmedName,
+      );
+      _familyProfileBootstrap = FamilyProfileBootstrap(
+        profileCompleted: true,
+        suggestedEmail: trimmedEmail,
+        suggestedName: trimmedName,
+        profile: FamilyProfile(
+          email: trimmedEmail,
+          phone: trimmedPhone,
+          name: trimmedName,
+        ),
+      );
+      _familyProfileStatus = FamilyProfileStatus.complete;
+      return true;
+    } catch (error) {
+      _familyProfileErrorMessage = resolveApiErrorMessage(
+        error,
+        fallback: '家属资料保存失败，请稍后重试。',
+      );
+      return false;
+    } finally {
+      _isSavingFamilyProfile = false;
+      notifyListeners();
+    }
   }
 
   Future<void> refreshAuthenticatedSession() async {
@@ -306,6 +412,10 @@ class AuthProvider extends ChangeNotifier {
       _user = null;
       _privateMessage = null;
       _privateUserInfo = null;
+      _familyProfileBootstrap = null;
+      _familyProfileStatus = FamilyProfileStatus.unknown;
+      _familyProfileErrorMessage = null;
+      _isSavingFamilyProfile = false;
       _status = AuthStatus.unauthenticated;
       _errorMessage = null;
       notifyListeners();
@@ -322,6 +432,10 @@ class AuthProvider extends ChangeNotifier {
     _user = null;
     _privateMessage = null;
     _privateUserInfo = null;
+    _familyProfileBootstrap = null;
+    _familyProfileStatus = FamilyProfileStatus.unknown;
+    _familyProfileErrorMessage = null;
+    _isSavingFamilyProfile = false;
     _status = AuthStatus.unauthenticated;
     _errorMessage = null;
     _isLoggingIn = false;

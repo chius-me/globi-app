@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
+
 import '../config/constants.dart';
 import '../models/auth_config.dart';
 import '../models/auth_tokens.dart';
 import '../models/current_user.dart';
+import '../models/family_profile_bootstrap.dart';
 
 class AuthApiService {
   final Dio _publicDio;
@@ -105,5 +107,25 @@ class AuthApiService {
     final dio = _protectedDio ?? _publicDio;
     final response = await dio.get('/api/private');
     return response.data as Map<String, dynamic>;
+  }
+
+  Future<FamilyProfileBootstrap> getFamilyProfileBootstrap() async {
+    final dio = _protectedDio ?? _publicDio;
+    final response = await dio.get('/api/family/profile/bootstrap');
+    return FamilyProfileBootstrap.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  Future<void> saveFamilyProfile({
+    required String email,
+    required String phone,
+    required String name,
+  }) async {
+    final dio = _protectedDio ?? _publicDio;
+    await dio.post(
+      '/api/family/profile',
+      data: {'email': email.trim(), 'phone': phone.trim(), 'name': name.trim()},
+    );
   }
 }

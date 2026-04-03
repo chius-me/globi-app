@@ -55,7 +55,8 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response?.statusCode == 401 && err.requestOptions.extra['auth_retry'] != true) {
+    if (err.response?.statusCode == 401 &&
+        err.requestOptions.extra['auth_retry'] != true) {
       final result = await _tryRefresh();
       if (result.success && result.accessToken != null) {
         final opts = err.requestOptions;

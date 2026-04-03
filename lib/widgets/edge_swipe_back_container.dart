@@ -83,8 +83,14 @@ class _EdgeSwipeBackContainerState extends State<EdgeSwipeBackContainer> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _handleWillPop,
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          return;
+        }
+        unawaited(_handleWillPop());
+      },
       child: Stack(
         children: [
           AnimatedContainer(

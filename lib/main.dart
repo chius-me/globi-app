@@ -17,6 +17,7 @@ import 'services/secure_storage_service.dart';
 import 'interceptors/auth_interceptor.dart';
 import 'screens/blind_link_screen.dart';
 import 'screens/blind_home_screen.dart';
+import 'screens/family_profile_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/mode_selection_screen.dart';
@@ -220,7 +221,16 @@ class _GlobiAppState extends State<GlobiApp> {
                     case AuthStatus.unauthenticated:
                       return const LoginScreen();
                     case AuthStatus.authenticated:
-                      return const HomeScreen();
+                      switch (auth.familyProfileStatus) {
+                        case FamilyProfileStatus.unknown:
+                        case FamilyProfileStatus.loading:
+                          return const SplashScreen();
+                        case FamilyProfileStatus.incomplete:
+                        case FamilyProfileStatus.error:
+                          return const FamilyProfileScreen();
+                        case FamilyProfileStatus.complete:
+                          return const HomeScreen();
+                      }
                   }
               }
             },

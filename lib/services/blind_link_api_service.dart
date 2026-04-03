@@ -1,12 +1,14 @@
 import 'package:dio/dio.dart';
 
 import '../config/constants.dart';
+import '../models/blind_family_call.dart';
 import '../models/blind_identity.dart';
 import '../models/blind_link_code.dart';
 import '../models/blind_link_result.dart';
 import '../models/blind_location.dart';
 import '../models/blind_location_upload_result.dart';
 import '../models/family_blind_user.dart';
+import '../models/family_blind_user_map.dart';
 import '../models/family_blind_user_location.dart';
 
 class BlindLinkApiService {
@@ -103,5 +105,35 @@ class BlindLinkApiService {
     return FamilyBlindUserLocation.fromJson(
       response.data as Map<String, dynamic>,
     );
+  }
+
+  Future<FamilyBlindUserMap> getFamilyBlindUserMap({
+    required String blindUserId,
+  }) async {
+    final dio = _protectedDio ?? _publicDio;
+    final response = await dio.get('/api/family/blind-users/$blindUserId/map');
+
+    return FamilyBlindUserMap.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<bool> deleteFamilyBlindUser({required String blindUserId}) async {
+    final dio = _protectedDio ?? _publicDio;
+    final response = await dio.delete('/api/family/blind-users/$blindUserId');
+    final data = response.data;
+    if (data is Map<String, dynamic>) {
+      return data['deleted'] as bool? ?? false;
+    }
+    return false;
+  }
+
+  Future<BlindFamilyCall> getBlindFamilyCall({
+    required String blindAccessToken,
+  }) async {
+    final response = await _publicDio.get(
+      '/api/blind/family-call',
+      options: Options(headers: {'Authorization': 'Bearer $blindAccessToken'}),
+    );
+
+    return BlindFamilyCall.fromJson(response.data as Map<String, dynamic>);
   }
 }

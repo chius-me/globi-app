@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../config/navigation.dart';
 import '../providers/app_mode_provider.dart';
@@ -86,14 +87,6 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
     super.dispose();
   }
 
-  Future<void> _refreshBlindHome() async {
-    final blindMode = context.read<BlindModeProvider>();
-    await blindMode.refreshBlindIdentity();
-    if (blindMode.isLinked) {
-      await blindMode.uploadCurrentLocation(silentErrors: false);
-    }
-  }
-
   Future<void> _confirmClearBlindAuthorization() async {
     final shouldClear = await showDialog<bool>(
       context: context,
@@ -116,6 +109,31 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
     if (shouldClear == true && mounted) {
       await context.read<BlindModeProvider>().clearBlindAuthorization();
     }
+  }
+
+  Future<void> _callFamily() async {
+    final blindMode = context.read<BlindModeProvider>();
+    final familyCall = await blindMode.fetchBlindFamilyCall();
+    if (!mounted || familyCall == null) {
+      return;
+    }
+
+    final uri = Uri.tryParse(familyCall.telUri);
+    if (uri == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前无法打开拨号界面')));
+      return;
+    }
+
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!mounted || launched) {
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('当前无法打开拨号界面')));
   }
 
   @override
@@ -191,16 +209,15 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
                       children: [
                         Expanded(
                           child: _BigButton(
-                            icon: Icons.phone_callback_rounded,
-                            label: '呼叫家属',
+                            icon: blindMode.isCallingFamily
+                                ? Icons.sync
+                                : Icons.phone_callback_rounded,
+                            label: blindMode.isCallingFamily ? '获取中' : '呼叫家属',
                             color: colorScheme.primaryContainer,
                             onColor: colorScheme.onPrimaryContainer,
-                            onTap: () {
-                              // TODO: 预留呼叫家属功能
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('功能开发中')),
-                              );
-                            },
+                            onTap: blindMode.isCallingFamily
+                                ? null
+                                : _callFamily,
                           ),
                         ),
                         const SizedBox(width: 12),

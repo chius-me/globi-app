@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/blind_location.dart';
 import '../models/family_blind_user.dart';
-import '../models/family_blind_user_location.dart';
+import '../models/family_blind_user_map.dart';
 import '../providers/family_blind_provider.dart';
 import '../utils/api_error.dart';
 
@@ -26,9 +30,10 @@ class FamilyBlindUserLocationScreen extends StatefulWidget {
 
 class _FamilyBlindUserLocationScreenState
     extends State<FamilyBlindUserLocationScreen> {
-  FamilyBlindUserLocation? _locationResponse;
+  FamilyBlindUserMap? _mapResponse;
   String? _errorMessage;
   bool _isLoading = false;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
@@ -38,7 +43,13 @@ class _FamilyBlindUserLocationScreenState
     });
   }
 
-  Future<void> _refreshLocation() async {
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshLocation({bool reschedule = true}) async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -47,13 +58,16 @@ class _FamilyBlindUserLocationScreenState
     try {
       final result = await context
           .read<FamilyBlindProvider>()
-          .refreshBlindUserLocation(widget.blindUser.blindUserId);
+          .refreshBlindUserMap(widget.blindUser.blindUserId);
       if (!mounted) {
         return;
       }
       setState(() {
-        _locationResponse = result;
+        _mapResponse = result;
       });
+      if (reschedule) {
+        _scheduleRefresh(result.refreshIntervalSeconds);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -64,6 +78,9 @@ class _FamilyBlindUserLocationScreenState
           fallback: '定位加载失败，请稍后重试。',
         );
       });
+      if (reschedule) {
+        _scheduleRefresh(_mapResponse?.refreshIntervalSeconds ?? 5);
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -73,6 +90,28 @@ class _FamilyBlindUserLocationScreenState
     }
   }
 
+  void _scheduleRefresh(int seconds) {
+    _refreshTimer?.cancel();
+    final safeSeconds = seconds.clamp(3, 60);
+    _refreshTimer = Timer(Duration(seconds: safeSeconds), () {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_refreshLocation());
+    });
+  }
+
+  bool get _isLocationStale {
+    final latestLocation = _mapResponse?.latestLocation;
+    final updatedAt = latestLocation?.updatedAt ?? latestLocation?.capturedAt;
+    if (latestLocation == null || updatedAt == null) {
+      return false;
+    }
+
+    return DateTime.now().toUtc().difference(updatedAt).inSeconds >
+        (_mapResponse?.staleAfterSeconds ?? 30);
+  }
+
   Future<void> _openMap(BlindLocation location) async {
     final uri = Uri.parse(
       'https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}',
@@ -80,16 +119,113 @@ class _FamilyBlindUserLocationScreenState
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  Future<void> _confirmDeleteBlindUser() async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除绑定'),
+        content: const Text('确认删除当前盲人绑定关系吗？删除后盲人端需要重新授权绑定。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('确认删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete != true || !mounted) {
+      return;
+    }
+
+    final deleted = await context.read<FamilyBlindProvider>().deleteBlindUser(
+      widget.blindUser.blindUserId,
+    );
+    if (!mounted) {
+      return;
+    }
+
+    if (deleted) {
+      _refreshTimer?.cancel();
+      Navigator.of(context).pop(true);
+      return;
+    }
+
+    setState(() {
+      _errorMessage =
+          context.read<FamilyBlindProvider>().errorMessage ?? '删除绑定失败，请稍后重试。';
+    });
+  }
+
+  Widget _buildMapPreview(
+    ThemeData theme,
+    ColorScheme colorScheme,
+    BlindLocation? location,
+  ) {
+    if (location == null) {
+      return Container(
+        height: 280,
+        width: double.infinity,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text('暂无定位', style: theme.textTheme.bodyLarge),
+      );
+    }
+
+    final point = LatLng(location.latitude, location.longitude);
+
+    return SizedBox(
+      height: 280,
+      width: double.infinity,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: FlutterMap(
+          key: ValueKey(
+            '${location.latitude}_${location.longitude}_${location.updatedAt}',
+          ),
+          options: MapOptions(initialCenter: point, initialZoom: 16),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'cn.tamochi.globi_mobile',
+            ),
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: point,
+                  width: 72,
+                  height: 72,
+                  child: Icon(
+                    Icons.location_on_rounded,
+                    size: 44,
+                    color: colorScheme.error,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final effectiveLocation =
-        _locationResponse?.latestLocation ?? widget.blindUser.latestLocation;
+        _mapResponse?.latestLocation ?? widget.blindUser.latestLocation;
 
     return Scaffold(
       body: RefreshIndicator(
-        onRefresh: _refreshLocation,
+        onRefresh: () => _refreshLocation(reschedule: true),
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
@@ -132,7 +268,7 @@ class _FamilyBlindUserLocationScreenState
                         _InfoLine(
                           label: '最近定位',
                           value: _formatDateTime(
-                            _locationResponse?.latestLocation?.updatedAt ??
+                            _mapResponse?.latestLocation?.updatedAt ??
                                 widget.blindUser.lastLocationAt,
                           ),
                           color: colorScheme.onPrimaryContainer,
@@ -149,6 +285,19 @@ class _FamilyBlindUserLocationScreenState
                         _errorMessage!,
                         style: theme.textTheme.bodyLarge?.copyWith(
                           color: colorScheme.onErrorContainer,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (_isLocationStale) ...[
+                    _SectionCard(
+                      color: colorScheme.tertiaryContainer,
+                      onColor: colorScheme.onTertiaryContainer,
+                      child: Text(
+                        '定位可能已过期，请稍后刷新确认盲人端是否仍在持续上报。',
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: colorScheme.onTertiaryContainer,
                         ),
                       ),
                     ),
@@ -191,9 +340,9 @@ class _FamilyBlindUserLocationScreenState
                           ],
                         ),
                         const SizedBox(height: 12),
-                        if (effectiveLocation == null)
-                          Text('暂无定位', style: theme.textTheme.bodyLarge)
-                        else ...[
+                        _buildMapPreview(theme, colorScheme, effectiveLocation),
+                        if (effectiveLocation != null) ...[
+                          const SizedBox(height: 16),
                           _InfoLine(
                             label: '纬度',
                             value: effectiveLocation.latitude.toStringAsFixed(
@@ -236,16 +385,59 @@ class _FamilyBlindUserLocationScreenState
                             label: '更新时间',
                             value: _formatDateTime(effectiveLocation.updatedAt),
                           ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: () => _openMap(effectiveLocation),
-                              icon: const Icon(Icons.open_in_new_rounded),
-                              label: const Text('打开外部地图'),
-                            ),
-                          ),
                         ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _SectionCard(
+                    color: colorScheme.surfaceContainerHigh,
+                    onColor: colorScheme.onSurface,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (effectiveLocation != null)
+                          OutlinedButton.icon(
+                            onPressed: () => _openMap(effectiveLocation),
+                            icon: const Icon(Icons.open_in_new_rounded),
+                            label: const Text('打开外部地图'),
+                          ),
+                        if (effectiveLocation != null)
+                          const SizedBox(height: 12),
+                        FilledButton.tonalIcon(
+                          onPressed: _isLoading ? null : _refreshLocation,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('立即刷新定位'),
+                        ),
+                        const SizedBox(height: 12),
+                        Consumer<FamilyBlindProvider>(
+                          builder: (context, familyBlind, _) {
+                            return FilledButton.icon(
+                              onPressed: familyBlind.isDeletingBlindUser
+                                  ? null
+                                  : _confirmDeleteBlindUser,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: colorScheme.error,
+                                foregroundColor: colorScheme.onError,
+                              ),
+                              icon: familyBlind.isDeletingBlindUser
+                                  ? SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: colorScheme.onError,
+                                      ),
+                                    )
+                                  : const Icon(Icons.delete_forever_rounded),
+                              label: Text(
+                                familyBlind.isDeletingBlindUser
+                                    ? '删除中...'
+                                    : '删除绑定',
+                              ),
+                            );
+                          },
+                        ),
                       ],
                     ),
                   ),

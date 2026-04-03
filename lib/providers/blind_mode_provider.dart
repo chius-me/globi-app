@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../models/blind_family_call.dart';
 import '../models/blind_identity.dart';
 import '../models/blind_link_result.dart';
 import '../models/blind_location.dart';
@@ -29,6 +30,7 @@ class BlindModeProvider extends ChangeNotifier {
   bool _isLinking = false;
   bool _isRefreshingIdentity = false;
   bool _isUploadingLocation = false;
+  bool _isCallingFamily = false;
   bool _trackingEnabled = false;
   Timer? _uploadTimer;
   Future<void>? _initializeFuture;
@@ -51,6 +53,7 @@ class BlindModeProvider extends ChangeNotifier {
   bool get isLinking => _isLinking;
   bool get isRefreshingIdentity => _isRefreshingIdentity;
   bool get isUploadingLocation => _isUploadingLocation;
+  bool get isCallingFamily => _isCallingFamily;
   bool get isLinked => _status == BlindSessionStatus.linked;
 
   Future<void> initialize() {
@@ -284,6 +287,44 @@ class BlindModeProvider extends ChangeNotifier {
     return _locationService.openAppSettings();
   }
 
+  Future<BlindFamilyCall?> fetchBlindFamilyCall() async {
+    if (_isCallingFamily) {
+      return null;
+    }
+
+    final blindAccessToken = await _storage.getBlindAccessToken();
+    if (blindAccessToken == null || blindAccessToken.isEmpty) {
+      await _clearBlindAuthorization();
+      return null;
+    }
+
+    _isCallingFamily = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await _blindApi.getBlindFamilyCall(
+        blindAccessToken: blindAccessToken,
+      );
+      _errorMessage = null;
+      return result;
+    } catch (error) {
+      if (isUnauthorizedError(error)) {
+        await _clearBlindAuthorization(errorMessage: '盲人授权已失效，请重新输入授权码。');
+        return null;
+      }
+
+      _errorMessage = resolveApiErrorMessage(
+        error,
+        fallback: '当前无法获取家属联系电话，请稍后再试。',
+      );
+      return null;
+    } finally {
+      _isCallingFamily = false;
+      notifyListeners();
+    }
+  }
+
   void clearError() {
     if (_errorMessage == null) {
       return;
@@ -352,6 +393,7 @@ class BlindModeProvider extends ChangeNotifier {
   @override
   void dispose() {
     _uploadTimer?.cancel();
+    _positionStreamSubscription?.cancel();
     super.dispose();
   }
 }
