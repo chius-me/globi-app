@@ -1,5 +1,7 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:pinput/pinput.dart';
 
 import '../providers/app_mode_provider.dart';
 import '../providers/blind_mode_provider.dart';
@@ -12,22 +14,71 @@ class BlindLinkScreen extends StatefulWidget {
   State<BlindLinkScreen> createState() => _BlindLinkScreenState();
 }
 
-class _BlindLinkScreenState extends State<BlindLinkScreen> {
+class _BlindLinkScreenState extends State<BlindLinkScreen>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _authorizationCodeController =
       TextEditingController();
 
+  late final AnimationController _shakeController;
+  bool _isError = false;
+  bool _isSuccess = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _shakeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _authorizationCodeController.addListener(_onCodeChanged);
+  }
+
+  void _onCodeChanged() {
+    if (_authorizationCodeController.text.isEmpty && (_isError || _isSuccess)) {
+      setState(() {
+        _isError = false;
+        _isSuccess = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _authorizationCodeController.removeListener(_onCodeChanged);
+    _shakeController.dispose();
     _authorizationCodeController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    final blindMode = context.read<BlindModeProvider>();
+    if (blindMode.isLinking) return;
+
     FocusScope.of(context).unfocus();
-    await context.read<BlindModeProvider>().redeemBlindLinkCode(
+    setState(() {
+      _isError = false;
+      _isSuccess = false;
+    });
+
+    await blindMode.redeemBlindLinkCode(
       authorizationCode: _authorizationCodeController.text,
       deviceLabel: '',
     );
+
+    if (mounted) {
+      if (blindMode.errorMessage != null) {
+        setState(() {
+          _isError = true;
+          _isSuccess = false;
+        });
+        _shakeController.forward(from: 0);
+      } else {
+        setState(() {
+          _isSuccess = true;
+          _isError = false;
+        });
+      }
+    }
   }
 
   Future<void> _resetToHome() async {
@@ -57,57 +108,111 @@ class _BlindLinkScreenState extends State<BlindLinkScreen> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (blindMode.errorMessage != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 24),
-                                child: Text(
-                                  blindMode.errorMessage!,
-                                  style: theme.textTheme.titleLarge?.copyWith(
-                                    color: colorScheme.error,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            TextField(
-                              controller: _authorizationCodeController,
-                              textCapitalization: TextCapitalization.characters,
-                              textInputAction: TextInputAction.done,
-                              onSubmitted: (_) => _submit(),
-                              style: const TextStyle(
-                                fontSize: 32,
+                            Text(
+                              '请输入授权码',
+                              style: theme.textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                letterSpacing: 2,
                               ),
                               textAlign: TextAlign.center,
-                              decoration: InputDecoration(
-                                hintText: '请输入授权码',
-                                hintStyle: TextStyle(
-                                  fontSize: 24,
-                                  color: colorScheme.onSurfaceVariant
-                                      .withValues(alpha: 0.5),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 24,
-                                  horizontal: 16,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
+                            ),
+                            const SizedBox(height: 32),
+                            AnimatedBuilder(
+                              animation: _shakeController,
+                              builder: (context, child) {
+                                final sineValue = math.sin(
+                                  _shakeController.value * math.pi * 4,
+                                );
+                                return Transform.translate(
+                                  offset: Offset(sineValue * 8.0, 0),
+                                  child: child,
+                                );
+                              },
+                              child: Center(
+                                child: Pinput(
+                                  length: 8,
+                                  controller: _authorizationCodeController,
+                                  defaultPinTheme: PinTheme(
+                                    width: 36,
+                                    height: 52,
+                                    textStyle: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          colorScheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  focusedPinTheme: PinTheme(
+                                    width: 38,
+                                    height: 54,
+                                    textStyle: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          colorScheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: colorScheme.primary,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  separatorBuilder: (index) {
+                                    if (index == 3) {
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                        ),
+                                        child: Text(
+                                          '-',
+                                          style: TextStyle(
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    return const SizedBox(width: 4);
+                                  },
+                                  textCapitalization:
+                                      TextCapitalization.characters,
+                                  keyboardType: TextInputType.visiblePassword,
+                                  onCompleted: (_) => _submit(),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 32),
+                            const SizedBox(height: 36),
                             SizedBox(
                               height: 80,
                               child: FilledButton(
-                                onPressed: blindMode.isLinking ? null : _submit,
+                                onPressed: blindMode.isLinking || _isSuccess
+                                    ? null
+                                    : _submit,
                                 style: FilledButton.styleFrom(
+                                  backgroundColor: (_isError || _isSuccess)
+                                      ? Colors.red
+                                      : null,
+                                  disabledBackgroundColor: _isSuccess
+                                      ? Colors.red
+                                      : null,
+                                  disabledForegroundColor: _isSuccess
+                                      ? Colors.white
+                                      : null,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(24),
                                   ),
                                 ),
                                 child: Text(
-                                  blindMode.isLinking ? '绑定中' : '确定',
+                                  blindMode.isLinking
+                                      ? '绑定中'
+                                      : (_isError
+                                            ? '授权码错误'
+                                            : (_isSuccess ? '授权码正确' : '确定')),
                                   style: const TextStyle(
                                     fontSize: 28,
                                     fontWeight: FontWeight.w600,

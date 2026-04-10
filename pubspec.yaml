@@ -46,6 +46,8 @@ dependencies:
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
   google_fonts: ^8.0.2
+  flutter_svg: ^2.0.10
+  pinput: ^6.0.2
 
 dev_dependencies:
   flutter_test:
@@ -68,6 +70,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/icons_login/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

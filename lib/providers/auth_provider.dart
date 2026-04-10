@@ -609,6 +609,13 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  void cancelOidcLogin() {
+    _isLoggingIn = false;
+    _pendingPkce = null;
+    _storage.clearPendingPkce();
+    notifyListeners();
+  }
+
   Future<void> handleCallback(Uri uri) async {
     await initialize();
     _errorMessage = null;
