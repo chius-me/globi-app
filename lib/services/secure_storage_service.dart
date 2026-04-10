@@ -1,11 +1,14 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../models/family_login_method.dart';
+
 class SecureStorageService {
   static const _keyAppMode = 'app_mode';
   static const _keyAccessToken = 'access_token';
   static const _keyRefreshToken = 'refresh_token';
   static const _keyIdToken = 'id_token';
   static const _keyExpiresAt = 'expires_at';
+  static const _keyFamilyLoginMethod = 'family_login_method';
   static const _keyPkceCodeVerifier = 'pkce_code_verifier';
   static const _keyPkceCodeChallenge = 'pkce_code_challenge';
   static const _keyPkceState = 'pkce_state';
@@ -36,13 +39,25 @@ class SecureStorageService {
     required int expiresAt,
   }) async {
     await _storage.write(key: _keyAccessToken, value: accessToken);
-    if (refreshToken != null) {
-      await _storage.write(key: _keyRefreshToken, value: refreshToken);
-    }
-    if (idToken != null) {
-      await _storage.write(key: _keyIdToken, value: idToken);
-    }
+    await _writeOrDelete(_keyRefreshToken, refreshToken);
+    await _writeOrDelete(_keyIdToken, idToken);
     await _storage.write(key: _keyExpiresAt, value: expiresAt.toString());
+  }
+
+  Future<void> saveFamilyLoginMethod(FamilyLoginMethod loginMethod) {
+    return _storage.write(
+      key: _keyFamilyLoginMethod,
+      value: loginMethod.storageValue,
+    );
+  }
+
+  Future<FamilyLoginMethod?> getFamilyLoginMethod() async {
+    final value = await _storage.read(key: _keyFamilyLoginMethod);
+    return familyLoginMethodFromStorage(value);
+  }
+
+  Future<void> clearFamilyLoginMethod() {
+    return _storage.delete(key: _keyFamilyLoginMethod);
   }
 
   Future<String?> getAccessToken() => _storage.read(key: _keyAccessToken);
@@ -161,6 +176,7 @@ class SecureStorageService {
     await _storage.delete(key: _keyRefreshToken);
     await _storage.delete(key: _keyIdToken);
     await _storage.delete(key: _keyExpiresAt);
+    await _storage.delete(key: _keyFamilyLoginMethod);
     await clearPendingPkce();
   }
 

@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+
+import '../models/family_login_method.dart';
 import '../services/secure_storage_service.dart';
 import '../services/auth_api_service.dart';
 
@@ -91,7 +93,12 @@ class AuthInterceptor extends Interceptor {
         return result;
       }
 
-      final tokens = await _authApi.refreshToken(refreshToken: refreshToken);
+      final loginMethod =
+          await _storage.getFamilyLoginMethod() ?? FamilyLoginMethod.oidc;
+      final tokens = await _authApi.refreshFamilyToken(
+        refreshToken: refreshToken,
+        loginMethod: loginMethod,
+      );
       await _storage.saveTokens(
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,

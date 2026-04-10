@@ -6,6 +6,7 @@ import '../models/family_blind_user.dart';
 import '../providers/app_mode_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/family_blind_provider.dart';
+import 'family_change_password_screen.dart';
 import 'family_blind_user_location_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -68,6 +69,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   pinned: true,
                   title: const Text('家属主页'),
                   actions: [
+                    if (auth.isLocalLogin)
+                      IconButton(
+                        icon: const Icon(Icons.password_rounded),
+                        tooltip: '修改密码',
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  const FamilyChangePasswordScreen(),
+                            ),
+                          );
+                        },
+                      ),
                     IconButton(
                       icon: const Icon(Icons.logout),
                       tooltip: '退出',

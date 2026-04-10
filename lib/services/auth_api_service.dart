@@ -4,7 +4,9 @@ import '../config/constants.dart';
 import '../models/auth_config.dart';
 import '../models/auth_tokens.dart';
 import '../models/current_user.dart';
+import '../models/family_login_method.dart';
 import '../models/family_profile_bootstrap.dart';
+import '../models/local_auth_registration_result.dart';
 
 class AuthApiService {
   final Dio _publicDio;
@@ -69,8 +71,23 @@ class AuthApiService {
   }
 
   Future<AuthTokens> refreshToken({required String refreshToken}) async {
+    return refreshFamilyToken(
+      refreshToken: refreshToken,
+      loginMethod: FamilyLoginMethod.oidc,
+    );
+  }
+
+  Future<AuthTokens> refreshFamilyToken({
+    required String refreshToken,
+    required FamilyLoginMethod loginMethod,
+  }) async {
+    final path = switch (loginMethod) {
+      FamilyLoginMethod.oidc => '/api/auth/refresh',
+      FamilyLoginMethod.local => '/api/auth/local/refresh',
+    };
+
     final response = await _publicDio.post(
-      '/api/auth/refresh',
+      path,
       data: {'refresh_token': refreshToken},
     );
     return AuthTokens.fromJson(response.data as Map<String, dynamic>);
@@ -93,6 +110,87 @@ class AuthApiService {
       },
     );
     return response.data as Map<String, dynamic>;
+  }
+
+  Future<void> logoutLocal({required String refreshToken}) async {
+    await _publicDio.post(
+      '/api/auth/local/logout',
+      data: {'refresh_token': refreshToken},
+    );
+  }
+
+  Future<LocalAuthRegistrationResult> registerLocalAccount({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _publicDio.post(
+      '/api/auth/local/register',
+      data: {'email': email.trim(), 'password': password},
+    );
+    return LocalAuthRegistrationResult.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  Future<void> verifyLocalEmail({
+    required String email,
+    required String code,
+  }) async {
+    await _publicDio.post(
+      '/api/auth/local/verify-email',
+      data: {'email': email.trim(), 'code': code.trim()},
+    );
+  }
+
+  Future<void> resendLocalVerificationCode({required String email}) async {
+    await _publicDio.post(
+      '/api/auth/local/resend-verification-code',
+      data: {'email': email.trim()},
+    );
+  }
+
+  Future<AuthTokens> loginWithLocalAccount({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _publicDio.post(
+      '/api/auth/local/login',
+      data: {'email': email.trim(), 'password': password},
+    );
+    return AuthTokens.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<void> forgotLocalPassword({required String email}) async {
+    await _publicDio.post(
+      '/api/auth/local/forgot-password',
+      data: {'email': email.trim()},
+    );
+  }
+
+  Future<void> resetLocalPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    await _publicDio.post(
+      '/api/auth/local/reset-password',
+      data: {
+        'email': email.trim(),
+        'code': code.trim(),
+        'new_password': newPassword,
+      },
+    );
+  }
+
+  Future<void> changeLocalPassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    final dio = _protectedDio ?? _publicDio;
+    await dio.post(
+      '/api/auth/local/change-password',
+      data: {'old_password': oldPassword, 'new_password': newPassword},
+    );
   }
 
   Future<CurrentUser> getMe({required String accessToken}) async {
