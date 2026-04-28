@@ -1,0 +1,156 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: flutter
+    env:
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
+      FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
+    permissions:
+      contents: write
+    steps:
+      - name: Prepare Node.js for Actions
+        run: |
+          sudo apt-get update && sudo apt-get install -y nodejs
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          set -eu
+          for secret_name in \
+            ANDROID_KEYSTORE_BASE64 \
+            ANDROID_STORE_PASSWORD \
+            ANDROID_KEY_ALIAS \
+            ANDROID_KEY_PASSWORD \
+            GITEA_TOKEN
+          do
+            if [ -z "${!secret_name}" ]; then
+              echo "Missing required secret: ${secret_name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Restore Android signing files
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-keystore.jks
+          printf '%s\n' \
+            'storeFile=release-keystore.jks' \
+            "storePassword=$ANDROID_STORE_PASSWORD" \
+            "keyAlias=$ANDROID_KEY_ALIAS" \
+            "keyPassword=$ANDROID_KEY_PASSWORD" > android/key.properties
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Flutter project
+        run: flutter analyze
+
+      - name: Build signed release APK
+        run: flutter build apk --release
+
+      - name: Prepare release asset
+        run: |
+          set -eu
+          source_apk="build/app/outputs/flutter-apk/app-release.apk"
+          safe_asset_tag="$(python3 -c 'import re, sys; print(re.sub(r"[^A-Za-z0-9._-]", "-", sys.argv[1]))' "$GITHUB_REF_NAME")"
+          release_apk="build/app/outputs/flutter-apk/globi-mobile-${safe_asset_tag}-release.apk"
+          if [ ! -f "$source_apk" ]; then
+            echo "Expected APK not found: $source_apk" >&2
+            exit 1
+          fi
+          cp "$source_apk" "$release_apk"
+
+      - name: Create Gitea release
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          set -eu
+          api_root="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          encoded_tag="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$GITHUB_REF_NAME")"
+          release_by_tag_url="${api_root}/releases/tags/${encoded_tag}"
+          release_response_path=".release-response.json"
+          status_code=$(curl -sS -o "$release_response_path" -w '%{http_code}' \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            "$release_by_tag_url")
+          case "$status_code" in
+            200)
+              echo "Reusing existing release for tag ${GITHUB_REF_NAME}."
+              ;;
+            404)
+              release_payload_path="$(mktemp)"
+              python3 -c 'import json, sys; json.dump({"tag_name": sys.argv[1], "name": sys.argv[1], "draft": False, "prerelease": False}, sys.stdout)' \
+                "$GITHUB_REF_NAME" > "$release_payload_path"
+
+              curl --fail -sS \
+                -X POST \
+                -H "Authorization: token ${GITEA_TOKEN}" \
+                -H 'Content-Type: application/json' \
+                --data-binary "@$release_payload_path" \
+                "${api_root}/releases" > "$release_response_path"
+              ;;
+            *)
+              echo "Unexpected response while checking existing release: HTTP ${status_code}." >&2
+              exit 1
+              ;;
+          esac
+
+          release_id="$(python3 -c 'import json, sys; release_id = json.load(open(sys.argv[1], encoding="utf-8")).get("id"); print(release_id if isinstance(release_id, int) else "")' "$release_response_path")"
+          if [ -z "$release_id" ]; then
+            echo 'Failed to parse release id from release response.' >&2
+            exit 1
+          fi
+
+          printf '%s' "$release_id" > .release-id
+
+      - name: Upload APK release asset
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          set -eu
+          api_root="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          release_id="$(cat .release-id)"
+          release_response_path=".release-response.json"
+          safe_asset_tag="$(python3 -c 'import re, sys; print(re.sub(r"[^A-Za-z0-9._-]", "-", sys.argv[1]))' "$GITHUB_REF_NAME")"
+          asset_path="build/app/outputs/flutter-apk/globi-mobile-${safe_asset_tag}-release.apk"
+          asset_name="$(basename "$asset_path")"
+          encoded_asset_name="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$asset_name")"
+          if [ ! -f "$asset_path" ]; then
+            echo "Release asset not found: $asset_path" >&2
+            exit 1
+          fi
+
+          curl --fail -sS \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            "${api_root}/releases/${release_id}" > "$release_response_path"
+
+          asset_id="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1], encoding="utf-8")); assets = data.get("assets"); assets = assets if isinstance(assets, list) else data.get("attachments"); assets = assets if isinstance(assets, list) else []; matches = [asset.get("id") for asset in assets if asset.get("name") == sys.argv[2]]; asset_id = matches[0] if matches else ""; print(asset_id if isinstance(asset_id, int) else "")' "$release_response_path" "$asset_name")"
+          if [ -n "$asset_id" ]; then
+            curl --fail -sS \
+              -X DELETE \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              "${api_root}/releases/${release_id}/assets/${asset_id}"
+          fi
+
+          curl --fail -sS \
+            -X POST \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -F "attachment=@${asset_path};type=application/vnd.android.package-archive" \
+            "${api_root}/releases/${release_id}/assets?name=${encoded_asset_name}"
