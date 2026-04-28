@@ -12,7 +12,12 @@ jobs:
       contents: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        run: |
+          set -eu
+          git init
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin "$GITHUB_REF_NAME"
+          git checkout -q FETCH_HEAD
 
       - name: Validate required secrets
         env:
