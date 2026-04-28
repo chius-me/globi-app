@@ -8,6 +8,9 @@ on:
 jobs:
   release:
     runs-on: flutter
+    env:
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
+      FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
     permissions:
       contents: write
     steps:
@@ -55,9 +58,6 @@ jobs:
             "keyPassword=$ANDROID_KEY_PASSWORD" > android/key.properties
 
       - name: Install Flutter dependencies
-        env:
-          PUB_HOSTED_URL: https://pub.flutter-io.cn
-          FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
         run: flutter pub get
 
       - name: Analyze Flutter project
