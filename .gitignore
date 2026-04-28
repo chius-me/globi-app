@@ -50,3 +50,4 @@ app.*.map.json
 
 fastapi.md
 frontend-agent.md
+.worktrees/
