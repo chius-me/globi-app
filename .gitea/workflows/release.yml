@@ -11,17 +11,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Check out repository
-        env:
-          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+      - name: Prepare Node.js for Actions
         run: |
-          set -eu
-          git init
-          # Strip schema from GITHUB_SERVER_URL to inject token
-          auth_url="$(echo "$GITHUB_SERVER_URL" | sed "s#^https*://#&oauth2:${GITEA_TOKEN}@#")"
-          git remote add origin "${auth_url}/${GITHUB_REPOSITORY}.git"
-          git fetch --depth=1 origin "$GITHUB_REF_NAME"
-          git checkout -q FETCH_HEAD
+          sudo apt-get update && sudo apt-get install -y nodejs
+      - name: Check out repository
+        uses: actions/checkout@v4
 
       - name: Validate required secrets
         env:
