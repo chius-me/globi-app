@@ -17,7 +17,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Diagnose available environment variables
+      - name: Validate required secrets
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
@@ -25,9 +25,19 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
-          echo "=== Env vars matching SECRET/ANDROID/KEY/STORE/TOKEN ==="
-          env | grep -iE 'SECRET|ANDROID|KEY|STORE|TOKEN' || echo "(no matches found)"
-          echo "=== End Env Debug ==="
+          set -eu
+          for secret_name in \
+            ANDROID_KEYSTORE_BASE64 \
+            ANDROID_STORE_PASSWORD \
+            ANDROID_KEY_ALIAS \
+            ANDROID_KEY_PASSWORD \
+            GITEA_TOKEN
+          do
+            if [ -z "${!secret_name}" ]; then
+              echo "Missing required secret: ${secret_name}" >&2
+              exit 1
+            fi
+          done
 
       - name: Restore Android signing files
         env:
