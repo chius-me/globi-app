@@ -8,11 +8,6 @@ on:
 jobs:
   release:
     runs-on: flutter
-    defaults:
-      run:
-        shell: bash
-    container:
-      image: ghcr.io/cirruslabs/flutter:stable
     permissions:
       contents: write
     steps:
