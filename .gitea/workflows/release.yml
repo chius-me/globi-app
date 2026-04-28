@@ -26,6 +26,14 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           set -eu
+          echo "=== Debug Secrets Start ==="
+          [ -n "$ANDROID_KEYSTORE_BASE64" ] && echo "ANDROID_KEYSTORE_BASE64 is SET" || echo "ANDROID_KEYSTORE_BASE64 is EMPTY"
+          [ -n "$ANDROID_STORE_PASSWORD" ] && echo "ANDROID_STORE_PASSWORD is SET" || echo "ANDROID_STORE_PASSWORD is EMPTY"
+          [ -n "$ANDROID_KEY_ALIAS" ] && echo "ANDROID_KEY_ALIAS is SET" || echo "ANDROID_KEY_ALIAS is EMPTY"
+          [ -n "$ANDROID_KEY_PASSWORD" ] && echo "ANDROID_KEY_PASSWORD is SET" || echo "ANDROID_KEY_PASSWORD is EMPTY"
+          [ -n "$GITEA_TOKEN" ] && echo "GITEA_TOKEN is SET" || echo "GITEA_TOKEN is EMPTY"
+          echo "=== Debug Secrets End ==="
+          
           for secret_name in \
             ANDROID_KEYSTORE_BASE64 \
             ANDROID_STORE_PASSWORD \
