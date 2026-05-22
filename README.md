@@ -116,7 +116,7 @@ flutter run
 后端地址在 `lib/config/constants.dart` 中配置：
 
 ```dart
-static const String backendBaseUrl = 'https://api.globi.lan.tamochi.cn';
+static const String backendBaseUrl = 'https://api.globi.tamochi.cn';
 ```
 
 开发时如需更改后端地址，直接修改此常量即可。项目没有使用 `.env` 文件，如需环境隔离建议自行引入 `flutter_dotenv` 或通过编译常量注入。
@@ -325,7 +325,7 @@ Checkout → Setup Flutter → 验证签名 Secrets → 还原签名文件
 
 ### 后端
 
-1. **后端地址硬编码** — `lib/config/constants.dart` 中的 `backendBaseUrl` 当前指向 `https://api.globi.lan.tamochi.cn`。如果多人需要连接不同后端，可以考虑引入 `flutter_dotenv` 包或通过编译时 Dart 定义（`--dart-define=BACKEND_URL=xxx`）注入。
+1. **后端地址硬编码** — `lib/config/constants.dart` 中的 `backendBaseUrl` 当前指向 `https://api.globi.tamochi.cn`。如果多人需要连接不同后端，可以考虑引入 `flutter_dotenv` 包或通过编译时 Dart 定义（`--dart-define=BACKEND_URL=xxx`）注入。
 2. **后端需要自建** — 后端源码在 [globi-server](https://github.com/chius-me/globi-server) 仓库（待完善），本地开发需要先启动后端服务。
 3. **OIDC 依赖** — 家属模式的 Authentik 登录需要后端和 Authentik 实例配合，本地调试时可能需要 mock 或使用开发环境。
 
