@@ -171,26 +171,174 @@ flutter build ios --release
 
 > iOS 发布需要 Apple Developer 账号、证书和 Provisioning Profile。
 
-### 推送 Tag 触发自动构建
-
-项目配置了 GitHub Actions，推送 `v*` 格式的 Tag 会自动构建签名 APK 并创建 Release：
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-Workflow 所需的 Secrets 已在仓库中配置：
-- `ANDROID_KEYSTORE_BASE64` — 签名证书（Base64 编码）
-- `ANDROID_STORE_PASSWORD` — 证书存储密码
-- `ANDROID_KEY_ALIAS` — 证书别名
-- `ANDROID_KEY_PASSWORD` — 证书密钥密码
-
 ### 运行测试
 
 ```bash
 flutter test
 ```
+
+## 协作规范
+
+### Git 分支策略
+
+```
+main         ← 稳定分支，随时可发布
+  └─ feat/*  ← 新功能开发分支（如 feat/voice-record）
+  └─ fix/*   ← Bug 修复分支（如 fix/location-crash）
+  └─ refactor/* ← 重构分支
+```
+
+- **`main`**：只接受 PR 合入，禁止直接推送。合入后即视为可发布状态。
+- **功能分支**：从 `main` 切出，命名格式 `feat/<简短描述>`，多个单词用连字符分隔。
+- **修复分支**：从 `main` 切出，命名格式 `fix/<简短描述>`。
+- 开发完成后通过 **Pull Request** 合入 `main`，PR 标题简明扼要描述改动内容。
+
+### Commit 规范
+
+使用常规提交格式，便于生成 Changelog 和回溯：
+
+```
+<type>: <简短描述>
+
+<可选：详细说明>
+```
+
+**常用类型：**
+
+| 类型 | 使用场景 |
+|------|----------|
+| `feat` | 新功能 |
+| `fix` | Bug 修复 |
+| `refactor` | 重构（不改变外部行为） |
+| `docs` | 文档变更 |
+| `style` | 代码格式调整（不影响逻辑） |
+| `chore` | 构建、CI、依赖等杂项 |
+| `revert` | 回滚提交 |
+
+**示例：**
+
+```
+feat: add voice recording waveform animation
+fix: handle null location when GPS is disabled
+refactor: extract location upload logic into service
+docs: add local development guide to README
+```
+
+### 版本号与 Tag
+
+项目遵循 **语义化版本** `v<主版本>.<次版本>.<补丁>`：
+
+| 版本 | 说明 |
+|------|------|
+| `v0.1.0` | 初始开发版 |
+| `v0.2.0` | 新增功能，向后兼容 |
+| `v0.2.1` | Bug 修复 |
+| `v1.0.0` | 第一个正式发布版 |
+
+**打 Tag 并触发自动构建：**
+
+```bash
+# 确保在正确的提交上
+git log --oneline -3
+
+# 创建 Tag（仅合入 main 后打 tag）
+git tag v0.2.0
+
+# 推送到 GitHub，触发 Release 流水线
+git push origin v0.2.0
+```
+
+> **重要规则：**
+> - Tag 只能在 `main` 分支上打，禁止在功能分支上打 Tag。
+> - Tag 名称必须匹配 `v*` 格式（如 `v0.2.0`），否则流水线不会触发。
+> - 一旦推送 Tag，流水线会自动构建并创建 Release，不可撤回（除删除 Tag 和 Release 外）。
+> - 发布后如需修复，递增补丁号打新 Tag（`v0.2.1`），不要删除旧 Tag 重打。
+
+```bash
+# 如果打错了 Tag（尚未推送）
+git tag -d v0.2.0
+
+# 如果已经推送了错误的 Tag
+git push origin :refs/tags/v0.2.0   # 删除远程 Tag
+git tag -d v0.2.0                    # 删除本地 Tag
+gh release delete v0.2.0 --yes       # 删除已创建的 Release
+```
+
+## CI/CD 流水线
+
+### 触发方式
+
+推送匹配 `v*` 格式的 Git Tag 时自动触发。
+
+```yaml
+on:
+  push:
+    tags:
+      - 'v*'
+```
+
+### 流水线步骤
+
+```
+Checkout → Setup Flutter → 验证签名 Secrets → 还原签名文件
+    → flutter pub get → flutter analyze → flutter build apk --release
+    → 重命名 APK → 创建 GitHub Release → 上传 APK
+```
+
+| 步骤 | 说明 |
+|------|------|
+| **Checkout** | 拉取 Tag 对应代码 |
+| **Setup Flutter** | 安装 stable 频道 Flutter SDK |
+| **验证 Secrets** | 检查 4 个签名 Secrets 是否全部配置 |
+| **还原签名文件** | 将 Base64 编码的 keystore 解码写入 `android/app/release-keystore.jks`，生成 `key.properties` |
+| **安装依赖** | `flutter pub get` |
+| **静态分析** | `flutter analyze` — 代码质量门禁，失败则中止 |
+| **构建 APK** | `flutter build apk --release` — 使用上述签名文件签名 |
+| **重命名 APK** | `globi-mobile-v0.1.0-release.apk` |
+| **创建 Release** | 自动创建 GitHub Release 并上传 APK 作为附件 |
+
+### 所需 Secrets
+
+以下 Secrets 已在仓库中配置，**不需要组员自行设置**：
+
+| Secret | 内容 |
+|--------|------|
+| `ANDROID_KEYSTORE_BASE64` | 发布用 keystore 的 Base64 编码 |
+| `ANDROID_STORE_PASSWORD` | keystore 密码 |
+| `ANDROID_KEY_ALIAS` | 密钥别名（globi-key） |
+| `ANDROID_KEY_PASSWORD` | 密钥密码 |
+
+## 开发注意事项
+
+### Android
+
+1. **国内镜像源** — `android/settings.gradle.kts` 和 `android/build.gradle.kts` 已预配 Aliyun、腾讯云、Flutter-IO 国内镜像，如果需要切回官方源可以直接删除这些镜像配置。
+2. **签名文件不要提交** — `android/key.properties` 和 `*.jks` 已在 `.gitignore` 中且被 Git 忽略。如果本地需要构建 release，按"Android 发布签名"章节自行生成。
+3. **NDK 版本** — 不需要手动安装 NDK 或设置 `ANDROID_NDK_HOME`，Gradle 会自动匹配 Flutter 要求的 NDK 版本。
+
+### iOS
+
+1. **Bundle ID** — iOS 的 Bundle Identifier 是 `com.example.globiMobile`，与 Android 的 `cn.tamochi.globi` 不同。发布前需要修改为正式的 Apple Developer 账号对应的 Bundle ID。
+2. **显示名称** — iOS 桌面显示名称为"领航助手"，在 `ios/Runner/Info.plist` 的 `CFBundleDisplayName` 中配置。
+3. **CocoaPods** — 首次构建需要 `cd ios && pod install`，生成 `.xcworkspace` 文件。
+4. **部署目标** — 最低 iOS 13.0。
+
+### 后端
+
+1. **后端地址硬编码** — `lib/config/constants.dart` 中的 `backendBaseUrl` 是硬编码的。如果多人需要连接不同后端，可以考虑引入 `flutter_dotenv` 包或通过编译时 Dart 定义（`--dart-define=BACKEND_URL=xxx`）注入。
+2. **后端需要自建** — 后端源码在 [globi-server](https://github.com/chius-me/globi-server) 仓库（待完善），本地开发需要先启动后端服务。
+3. **OIDC 依赖** — 家属模式的 Authentik 登录需要后端和 Authentik 实例配合，本地调试时可能需要 mock 或使用开发环境。
+
+### 安全性
+
+1. **Token 存储** — 访问令牌和刷新令牌存储在 `flutter_secure_storage` 中（Android 使用 EncryptedSharedPreferences，iOS 使用 Keychain），不会明文存储在本地。
+2. **PKCE 流程** — OAuth2 授权码流程使用了 PKCE（`lib/utils/pkce.dart`），验证器仅存于内存，App 重启后需重新登录。
+3. **API 认证** — 所有需要认证的请求通过 `AuthInterceptor` 自动附加 Token 并处理刷新逻辑，无需在每个 API 调用中手动处理。
+
+### 本地化
+
+1. **全部中文界面** — 当前所有 UI 文本为简体中文，无国际化（i18n）支持。如需添加多语言，建议引入 `flutter_localizations` 和 `intl` 包。
+2. **地图使用 OpenStreetMap** — `flutter_map` 使用 OpenStreetMap 瓦片，无需 API Key，但在中国境内可能需要代理才能正常加载瓦片。
 
 ### 常见问题
 
