@@ -9,10 +9,6 @@ class SecureStorageService {
   static const _keyIdToken = 'id_token';
   static const _keyExpiresAt = 'expires_at';
   static const _keyFamilyLoginMethod = 'family_login_method';
-  static const _keyPkceCodeVerifier = 'pkce_code_verifier';
-  static const _keyPkceCodeChallenge = 'pkce_code_challenge';
-  static const _keyPkceState = 'pkce_state';
-  static const _keyPkceNonce = 'pkce_nonce';
   static const _keyBlindAccessToken = 'blind_access_token';
   static const _keyBlindUserId = 'blind_user_id';
   static const _keyBlindUserName = 'blind_user_name';
@@ -35,12 +31,10 @@ class SecureStorageService {
   Future<void> saveTokens({
     required String accessToken,
     String? refreshToken,
-    String? idToken,
     required int expiresAt,
   }) async {
     await _storage.write(key: _keyAccessToken, value: accessToken);
     await _writeOrDelete(_keyRefreshToken, refreshToken);
-    await _writeOrDelete(_keyIdToken, idToken);
     await _storage.write(key: _keyExpiresAt, value: expiresAt.toString());
   }
 
@@ -67,46 +61,6 @@ class SecureStorageService {
   Future<int?> getExpiresAt() async {
     final val = await _storage.read(key: _keyExpiresAt);
     return val != null ? int.tryParse(val) : null;
-  }
-
-  Future<void> savePendingPkce({
-    required String codeVerifier,
-    required String codeChallenge,
-    required String state,
-    required String nonce,
-  }) async {
-    await _storage.write(key: _keyPkceCodeVerifier, value: codeVerifier);
-    await _storage.write(key: _keyPkceCodeChallenge, value: codeChallenge);
-    await _storage.write(key: _keyPkceState, value: state);
-    await _storage.write(key: _keyPkceNonce, value: nonce);
-  }
-
-  Future<Map<String, String>?> getPendingPkce() async {
-    final codeVerifier = await _storage.read(key: _keyPkceCodeVerifier);
-    final codeChallenge = await _storage.read(key: _keyPkceCodeChallenge);
-    final state = await _storage.read(key: _keyPkceState);
-    final nonce = await _storage.read(key: _keyPkceNonce);
-
-    if (codeVerifier == null ||
-        codeChallenge == null ||
-        state == null ||
-        nonce == null) {
-      return null;
-    }
-
-    return {
-      'code_verifier': codeVerifier,
-      'code_challenge': codeChallenge,
-      'state': state,
-      'nonce': nonce,
-    };
-  }
-
-  Future<void> clearPendingPkce() async {
-    await _storage.delete(key: _keyPkceCodeVerifier);
-    await _storage.delete(key: _keyPkceCodeChallenge);
-    await _storage.delete(key: _keyPkceState);
-    await _storage.delete(key: _keyPkceNonce);
   }
 
   Future<void> saveBlindSession({
@@ -177,7 +131,6 @@ class SecureStorageService {
     await _storage.delete(key: _keyIdToken);
     await _storage.delete(key: _keyExpiresAt);
     await _storage.delete(key: _keyFamilyLoginMethod);
-    await clearPendingPkce();
   }
 
   Future<void> _writeOrDelete(String key, String? value) {

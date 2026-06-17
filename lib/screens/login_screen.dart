@@ -5,8 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
+import '../config/design_tokens.dart';
 import '../providers/app_mode_provider.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/globi_button.dart';
+import '../widgets/globi_error_banner.dart';
 import '../widgets/edge_swipe_back_container.dart';
 
 enum _LocalAuthView { login, register, verifyEmail, resetPassword }
@@ -73,19 +76,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _setView(_LocalAuthView view, {bool clearError = true}) {
     FocusScope.of(context).unfocus();
-    if (clearError) {
-      context.read<AuthProvider>().clearError();
-    }
-
-    setState(() {
-      _view = view;
-    });
+    if (clearError) context.read<AuthProvider>().clearError();
+    setState(() => _view = view);
   }
 
   void _openEmailFlow({_LocalAuthView initialView = _LocalAuthView.login}) {
     FocusScope.of(context).unfocus();
     context.read<AuthProvider>().clearError();
-
     setState(() {
       _stage = _LoginStage.emailFlow;
       _view = initialView;
@@ -95,7 +92,6 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showMethodSelection() {
     FocusScope.of(context).unfocus();
     context.read<AuthProvider>().clearError();
-
     setState(() {
       _stage = _LoginStage.methodSelection;
       _view = _LocalAuthView.login;
@@ -108,113 +104,70 @@ class _LoginScreenState extends State<LoginScreen> {
       _setView(_LocalAuthView.login);
       return;
     }
-
     _showMethodSelection();
   }
 
   void _showMessage(String message) {
-    if (!mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String? _validateEmail(String? value) {
     final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return '请输入邮箱';
-    }
-
-    final emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-    if (!emailPattern.hasMatch(trimmed)) {
+    if (trimmed.isEmpty) return '请输入邮箱';
+    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(trimmed)) {
       return '请输入正确的邮箱';
     }
-
     return null;
   }
 
   String? _validatePassword(String? value, {required String label}) {
-    if (value == null || value.isEmpty) {
-      return '请输入$label';
-    }
+    if (value == null || value.isEmpty) return '请输入$label';
     return null;
   }
 
   String? _validateCode(String? value) {
     final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return '请输入验证码';
-    }
-
-    if (!RegExp(r'^\d{6}$').hasMatch(trimmed)) {
-      return '请输入6位验证码';
-    }
-
+    if (trimmed.isEmpty) return '请输入验证码';
+    if (!RegExp(r'^\d{6}$').hasMatch(trimmed)) return '请输入6位验证码';
     return null;
   }
 
-  void _startVerificationCooldown([int seconds = _resendCooldownSeconds]) {
-    _verificationCooldownTimer?.cancel();
+  void _startCooldown(bool isVerification, [int seconds = _resendCooldownSeconds]) {
+    final timer = isVerification ? _verificationCooldownTimer : _resetCooldownTimer;
+    timer?.cancel();
     setState(() {
-      _verificationCooldownRemaining = seconds;
+      if (isVerification) {
+        _verificationCooldownRemaining = seconds;
+      } else {
+        _resetCooldownRemaining = seconds;
+      }
     });
-
-    _verificationCooldownTimer = Timer.periodic(const Duration(seconds: 1), (
-      timer,
-    ) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      if (_verificationCooldownRemaining <= 1) {
-        timer.cancel();
-        setState(() {
-          _verificationCooldownRemaining = 0;
-        });
-        return;
-      }
-
+    Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) { timer.cancel(); return; }
       setState(() {
-        _verificationCooldownRemaining -= 1;
+        if (isVerification) {
+          if (_verificationCooldownRemaining <= 1) {
+            timer.cancel();
+            _verificationCooldownRemaining = 0;
+          } else {
+            _verificationCooldownRemaining -= 1;
+          }
+        } else {
+          if (_resetCooldownRemaining <= 1) {
+            timer.cancel();
+            _resetCooldownRemaining = 0;
+          } else {
+            _resetCooldownRemaining -= 1;
+          }
+        }
       });
     });
   }
 
-  void _startResetCooldown([int seconds = _resendCooldownSeconds]) {
-    _resetCooldownTimer?.cancel();
-    setState(() {
-      _resetCooldownRemaining = seconds;
-    });
-
-    _resetCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      if (_resetCooldownRemaining <= 1) {
-        timer.cancel();
-        setState(() {
-          _resetCooldownRemaining = 0;
-        });
-        return;
-      }
-
-      setState(() {
-        _resetCooldownRemaining -= 1;
-      });
-    });
-  }
-
+  // ... action methods unchanged from original
   Future<void> _submitLocalLogin(AuthProvider auth) async {
-    if (!(_loginFormKey.currentState?.validate() ?? false)) {
-      return;
-    }
-
+    if (!(_loginFormKey.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();
     await auth.loginWithLocalAccount(
       email: _loginEmailController.text,
@@ -223,125 +176,75 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submitRegister(AuthProvider auth) async {
-    if (!(_registerFormKey.currentState?.validate() ?? false)) {
-      return;
-    }
-
-    if (_registerPasswordController.text !=
-        _registerConfirmPasswordController.text) {
+    if (!(_registerFormKey.currentState?.validate() ?? false)) return;
+    if (_registerPasswordController.text != _registerConfirmPasswordController.text) {
       _showMessage('两次密码输入不一致');
       return;
     }
-
     FocusScope.of(context).unfocus();
     final result = await auth.registerLocalAccount(
       email: _registerEmailController.text,
       password: _registerPasswordController.text,
     );
-    if (result == null || !mounted) {
-      return;
-    }
-
+    if (result == null || !mounted) return;
     _verifyEmailController.text = result.email;
     _verifyCodeController.clear();
     _loginEmailController.text = result.email;
-
     setState(() {
       _view = _LocalAuthView.verifyEmail;
-      _verificationCodeTtlSeconds = result.codeTtlSeconds > 0
-          ? result.codeTtlSeconds
-          : null;
+      _verificationCodeTtlSeconds = result.codeTtlSeconds > 0 ? result.codeTtlSeconds : null;
     });
-    _startVerificationCooldown();
-
-    final message = result.emailSent
-        ? '验证码已发送到 ${result.email}'
-        : '注册成功，请输入邮箱验证码';
-    _showMessage(message);
+    _startCooldown(true);
+    _showMessage(result.emailSent ? '验证码已发送到 ${result.email}' : '注册成功，请输入邮箱验证码');
   }
 
   Future<void> _submitVerify(AuthProvider auth) async {
-    if (!(_verifyFormKey.currentState?.validate() ?? false)) {
-      return;
-    }
-
+    if (!(_verifyFormKey.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();
     final success = await auth.verifyLocalEmail(
       email: _verifyEmailController.text,
       code: _verifyCodeController.text,
     );
-    if (!success || !mounted) {
-      return;
-    }
-
+    if (!success || !mounted) return;
     _verifyCodeController.clear();
     _openEmailFlow(initialView: _LocalAuthView.login);
     _showMessage('邮箱验证完成，请使用邮箱密码登录');
   }
 
   Future<void> _resendVerification(AuthProvider auth) async {
-    if (_verificationCooldownRemaining > 0) {
-      return;
-    }
-
+    if (_verificationCooldownRemaining > 0) return;
     final emailError = _validateEmail(_verifyEmailController.text);
-    if (emailError != null) {
-      _showMessage(emailError);
-      return;
-    }
-
+    if (emailError != null) { _showMessage(emailError); return; }
     FocusScope.of(context).unfocus();
-    final success = await auth.resendLocalVerificationCode(
-      email: _verifyEmailController.text,
-    );
-    if (!success || !mounted) {
-      return;
-    }
-
-    _startVerificationCooldown();
+    final success = await auth.resendLocalVerificationCode(email: _verifyEmailController.text);
+    if (!success || !mounted) return;
+    _startCooldown(true);
     _showMessage('验证码已重新发送');
   }
 
   Future<void> _sendResetCode(AuthProvider auth) async {
     final emailError = _validateEmail(_resetEmailController.text);
-    if (emailError != null) {
-      _showMessage(emailError);
-      return;
-    }
-
+    if (emailError != null) { _showMessage(emailError); return; }
     FocusScope.of(context).unfocus();
-    final success = await auth.sendLocalPasswordResetCode(
-      email: _resetEmailController.text,
-    );
-    if (!success || !mounted) {
-      return;
-    }
-
-    _startResetCooldown();
+    final success = await auth.sendLocalPasswordResetCode(email: _resetEmailController.text);
+    if (!success || !mounted) return;
+    _startCooldown(false);
     _showMessage('重置验证码已发送到邮箱');
   }
 
   Future<void> _submitReset(AuthProvider auth) async {
-    if (!(_resetFormKey.currentState?.validate() ?? false)) {
-      return;
-    }
-
-    if (_resetNewPasswordController.text !=
-        _resetConfirmPasswordController.text) {
+    if (!(_resetFormKey.currentState?.validate() ?? false)) return;
+    if (_resetNewPasswordController.text != _resetConfirmPasswordController.text) {
       _showMessage('两次新密码输入不一致');
       return;
     }
-
     FocusScope.of(context).unfocus();
     final success = await auth.resetLocalPassword(
       email: _resetEmailController.text,
       code: _resetCodeController.text,
       newPassword: _resetNewPasswordController.text,
     );
-    if (!success || !mounted) {
-      return;
-    }
-
+    if (!success || !mounted) return;
     _loginEmailController.text = _resetEmailController.text.trim();
     _loginPasswordController.clear();
     _resetCodeController.clear();
@@ -351,14 +254,9 @@ class _LoginScreenState extends State<LoginScreen> {
     _showMessage('密码已重置，请重新登录');
   }
 
-  String _cooldownLabel(int seconds) {
-    return '${seconds}s';
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return EdgeSwipeBackContainer(
       onBack: () => _resetToHome(context),
@@ -369,75 +267,53 @@ class _LoginScreenState extends State<LoginScreen> {
               final authBusy = auth.isLoggingIn || auth.isLocalAuthBusy;
 
               return SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+                padding: const EdgeInsets.fromLTRB(
+                  Spacing.lg, Spacing.xxl, Spacing.lg, Spacing.xxl,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Center(
                       child: Container(
-                        width: 132,
-                        height: 132,
+                        width: 88,
+                        height: 88,
                         decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(36),
+                          color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(RadiusTokens.card),
                         ),
                         child: Icon(
-                          Icons.public,
-                          size: 68,
-                          color: colorScheme.onPrimaryContainer,
+                          Icons.public_rounded,
+                          size: 44,
+                          color: theme.colorScheme.primary,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: Spacing.xl),
                     Center(
                       child: Text(
                         'Globi',
-                        style: theme.textTheme.headlineLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.02,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: Spacing.xs),
                     Center(
                       child: Text(
                         '家属登录',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: MinimalColors.textSecondary,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: Spacing.xxl),
                     if (auth.errorMessage != null) ...[
-                      Material(
-                        color: colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(20),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.error_outline,
-                                color: colorScheme.onErrorContainer,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  auth.errorMessage!,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: colorScheme.onErrorContainer,
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: auth.clearError,
-                                icon: const Icon(Icons.close),
-                                color: colorScheme.onErrorContainer,
-                              ),
-                            ],
-                          ),
-                        ),
+                      GlobiErrorBanner(
+                        message: auth.errorMessage!,
+                        onDismiss: auth.clearError,
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: Spacing.lg),
                     ],
                     if (_stage == _LoginStage.methodSelection)
                       _buildMethodSelection(context, auth, authBusy)
@@ -453,13 +329,8 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildLocalAuthCard(
-    BuildContext context,
-    AuthProvider auth,
-    bool authBusy,
-  ) {
+  Widget _buildLocalAuthCard(BuildContext context, AuthProvider auth, bool authBusy) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final showsPrimarySwitch =
         _view == _LocalAuthView.login || _view == _LocalAuthView.register;
 
@@ -481,22 +352,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     ? '重置密码'
                     : '使用邮箱登录',
                 style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: Spacing.md),
         if (showsPrimarySwitch)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: Spacing.lg),
             child: SizedBox(
               width: double.infinity,
               child: SegmentedButton<_LocalAuthView>(
                 showSelectedIcon: false,
                 style: SegmentedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: Spacing.md),
                 ),
                 segments: const [
                   ButtonSegment<_LocalAuthView>(
@@ -511,48 +382,45 @@ class _LoginScreenState extends State<LoginScreen> {
                 selected: {_view},
                 onSelectionChanged: authBusy
                     ? null
-                    : (selection) {
-                        final next = selection.first;
-                        _setView(next);
-                      },
+                    : (selection) => _setView(selection.first),
               ),
             ),
           )
         else
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: Spacing.xl),
             child: Text(
               _view == _LocalAuthView.verifyEmail
                   ? '请输入邮箱收到的验证码完成验证。'
                   : '通过邮箱验证码重置新密码。',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+                color: MinimalColors.textSecondary,
               ),
             ),
           ),
-        const SizedBox(height: 24),
-        Material(
-          color: colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(28),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: switch (_view) {
-              _LocalAuthView.login => _buildLoginForm(context, auth),
-              _LocalAuthView.register => _buildRegisterForm(context, auth),
-              _LocalAuthView.verifyEmail => _buildVerifyForm(context, auth),
-              _LocalAuthView.resetPassword => _buildResetForm(context, auth),
-            },
+        const SizedBox(height: Spacing.xl),
+        Container(
+          padding: const EdgeInsets.all(Spacing.xl),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(RadiusTokens.card),
+            border: Border.all(
+              color: theme.colorScheme.outline,
+              width: BorderTokens.thin,
+            ),
           ),
+          child: switch (_view) {
+            _LocalAuthView.login => _buildLoginForm(context, auth),
+            _LocalAuthView.register => _buildRegisterForm(context, auth),
+            _LocalAuthView.verifyEmail => _buildVerifyForm(context, auth),
+            _LocalAuthView.resetPassword => _buildResetForm(context, auth),
+          },
         ),
       ],
     );
   }
 
-  Widget _buildMethodSelection(
-    BuildContext context,
-    AuthProvider auth,
-    bool authBusy,
-  ) {
+  Widget _buildMethodSelection(BuildContext context, AuthProvider auth, bool authBusy) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -562,25 +430,14 @@ class _LoginScreenState extends State<LoginScreen> {
           iconAsset: 'assets/icons_login/email.svg',
           onTap: authBusy ? null : () => _openEmailFlow(),
         ),
-        const SizedBox(height: 16),
         _buildLoginMethodButton(
           context,
-          title: '使用微信登陆',
-          iconAsset: 'assets/icons_login/wechat.svg',
-          backgroundColor: const Color(0xFFE9F9EC),
-          foregroundColor: const Color(0xFF1F8F47),
-          onTap: authBusy ? null : () => _showMessage('微信登录接口暂未接入'),
-        ),
-        const SizedBox(height: 16),
-        _buildLoginMethodButton(
-          context,
-          title: auth.isLoggingIn ? '请使用浏览器验证' : '使用Authentik登陆',
-          iconAsset: 'assets/icons_login/authentik.svg',
-          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-          foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
-          onTap: authBusy && !auth.isLoggingIn ? null : auth.startOidcLogin,
+          title: auth.isLoggingIn ? '请使用浏览器验证' : '使用 GitHub 登陆',
+          iconAsset: 'assets/icons_login/email.svg',
+          icon: Icons.code_rounded,
+          onTap: authBusy && !auth.isLoggingIn ? null : auth.startGithubLogin,
           isLoading: auth.isLoggingIn,
-          onCancel: auth.isLoggingIn ? auth.cancelOidcLogin : null,
+          onCancel: auth.isLoggingIn ? auth.cancelGithubLogin : null,
         ),
       ],
     );
@@ -590,6 +447,7 @@ class _LoginScreenState extends State<LoginScreen> {
     BuildContext context, {
     required String title,
     required String iconAsset,
+    IconData? icon,
     required VoidCallback? onTap,
     Color? backgroundColor,
     Color? foregroundColor,
@@ -597,68 +455,77 @@ class _LoginScreenState extends State<LoginScreen> {
     VoidCallback? onCancel,
   }) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final resolvedBackground =
-        backgroundColor ?? colorScheme.surfaceContainerHighest;
-    final resolvedForeground = foregroundColor ?? colorScheme.onSurface;
+    final resolvedBackground = backgroundColor ?? theme.colorScheme.surface;
+    final resolvedForeground = foregroundColor ?? MinimalColors.textPrimary;
 
-    return Material(
-      color: resolvedBackground,
-      borderRadius: BorderRadius.circular(28),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(28),
-        onTap: isLoading ? null : onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: resolvedForeground.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(14),
-                ),
+    return InkWell(
+      onTap: isLoading ? null : onTap,
+      borderRadius: BorderRadius.circular(RadiusTokens.soft),
+      child: Container(
+        padding: const EdgeInsets.all(Spacing.lg),
+        decoration: BoxDecoration(
+          color: resolvedBackground,
+          borderRadius: BorderRadius.circular(RadiusTokens.soft),
+          border: Border.all(
+            color: theme.colorScheme.outline,
+            width: BorderTokens.thin,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: resolvedForeground.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(RadiusTokens.crisp),
+              ),
+              child: Center(
                 child: isLoading
                     ? SizedBox(
-                        width: 24,
-                        height: 24,
+                        width: 20,
+                        height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: resolvedForeground,
                         ),
                       )
-                    : SvgPicture.asset(
-                        iconAsset,
-                        width: 24,
-                        height: 24,
-                        colorFilter: ColorFilter.mode(
-                          resolvedForeground,
-                          BlendMode.srcIn,
-                        ),
-                      ),
+                    : icon != null
+                        ? Icon(icon, size: 22, color: resolvedForeground)
+                        : SvgPicture.asset(
+                            iconAsset,
+                            width: 22,
+                            height: 22,
+                            colorFilter: ColorFilter.mode(
+                              resolvedForeground,
+                              BlendMode.srcIn,
+                            ),
+                          ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: resolvedForeground,
-                    fontWeight: FontWeight.bold,
-                  ),
+            ),
+            const SizedBox(width: Spacing.lg),
+            Expanded(
+              child: Text(
+                title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              if (isLoading && onCancel != null)
-                IconButton(
+            ),
+            if (isLoading && onCancel != null)
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: IconButton(
                   onPressed: onCancel,
-                  icon: Icon(Icons.close_rounded, color: resolvedForeground),
+                  icon: Icon(Icons.close_rounded, size: 18, color: resolvedForeground),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                )
-              else
-                Icon(Icons.arrow_forward_rounded, color: resolvedForeground),
-            ],
-          ),
+                ),
+              )
+            else
+              Icon(Icons.chevron_right_rounded, size: 20, color: MinimalColors.textSecondary),
+          ],
         ),
       ),
     );
@@ -675,57 +542,35 @@ class _LoginScreenState extends State<LoginScreen> {
         children: [
           TextFormField(
             controller: _loginEmailController,
-            decoration: InputDecoration(
-              hintText: '邮箱',
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
+            decoration: const InputDecoration(hintText: '邮箱'),
             keyboardType: TextInputType.emailAddress,
             autofillHints: const [AutofillHints.username, AutofillHints.email],
             validator: _validateEmail,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           TextFormField(
             controller: _loginPasswordController,
-            decoration: InputDecoration(
-              hintText: '密码',
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
+            decoration: const InputDecoration(hintText: '密码'),
             obscureText: true,
             autofillHints: const [AutofillHints.password],
             validator: (value) => _validatePassword(value, label: '密码'),
             onFieldSubmitted: (_) => _submitLocalLogin(auth),
           ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: busy ? null : () => _submitLocalLogin(auth),
-            icon: busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.login_rounded),
-            label: const Text('邮箱登录'),
+          const SizedBox(height: Spacing.lg),
+          GlobiButton(
+            label: '邮箱登录',
+            icon: Icons.login_rounded,
+            isLoading: busy,
+            onPressed: () => _submitLocalLogin(auth),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.sm),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
               onPressed: auth.isLocalAuthBusy
                   ? null
                   : () {
-                      _resetEmailController.text = _loginEmailController.text
-                          .trim();
+                      _resetEmailController.text = _loginEmailController.text.trim();
                       _setView(_LocalAuthView.resetPassword);
                     },
               child: const Text('忘记密码'),
@@ -747,60 +592,31 @@ class _LoginScreenState extends State<LoginScreen> {
         children: [
           TextFormField(
             controller: _registerEmailController,
-            decoration: InputDecoration(
-              hintText: '邮箱',
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
+            decoration: const InputDecoration(hintText: '邮箱'),
             keyboardType: TextInputType.emailAddress,
             validator: _validateEmail,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           TextFormField(
             controller: _registerPasswordController,
-            decoration: InputDecoration(
-              hintText: '密码',
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
+            decoration: const InputDecoration(hintText: '密码'),
             obscureText: true,
             validator: (value) => _validatePassword(value, label: '密码'),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           TextFormField(
             controller: _registerConfirmPasswordController,
-            decoration: InputDecoration(
-              hintText: '确认密码',
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
+            decoration: const InputDecoration(hintText: '确认密码'),
             obscureText: true,
             validator: (value) => _validatePassword(value, label: '确认密码'),
             onFieldSubmitted: (_) => _submitRegister(auth),
           ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: busy ? null : () => _submitRegister(auth),
-            icon: busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.mark_email_read_outlined),
-            label: const Text('注册并发送验证码'),
+          const SizedBox(height: Spacing.lg),
+          GlobiButton(
+            label: '注册并发送验证码',
+            icon: Icons.mark_email_read_outlined,
+            isLoading: busy,
+            onPressed: () => _submitRegister(auth),
           ),
         ],
       ),
@@ -809,13 +625,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildVerifyForm(BuildContext context, AuthProvider auth) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final verifyBusy = auth.isLocalAuthActionInProgress(
-      LocalAuthAction.verifyEmail,
-    );
-    final resendBusy = auth.isLocalAuthActionInProgress(
-      LocalAuthAction.resendVerification,
-    );
+    final verifyBusy = auth.isLocalAuthActionInProgress(LocalAuthAction.verifyEmail);
+    final resendBusy = auth.isLocalAuthActionInProgress(LocalAuthAction.resendVerification);
 
     return Form(
       key: _verifyFormKey,
@@ -826,44 +637,28 @@ class _LoginScreenState extends State<LoginScreen> {
           Text(
             '验证码会发送到邮箱，请输入 6 位数字验证码完成验证。',
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+              color: MinimalColors.textSecondary,
             ),
           ),
           if (_verificationCodeTtlSeconds != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: Spacing.xs),
             Text(
               '验证码有效期约 ${(_verificationCodeTtlSeconds! / 60).ceil()} 分钟',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+                color: MinimalColors.textSecondary,
               ),
             ),
           ],
-          const SizedBox(height: 14),
+          const SizedBox(height: Spacing.md),
           TextFormField(
             controller: _verifyEmailController,
-            decoration: InputDecoration(
-              hintText: '邮箱',
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
+            decoration: const InputDecoration(hintText: '邮箱'),
             enabled: false,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           TextFormField(
             controller: _verifyCodeController,
-            decoration: InputDecoration(
-              hintText: '验证码',
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
+            decoration: const InputDecoration(hintText: '验证码'),
             keyboardType: TextInputType.number,
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
@@ -872,35 +667,22 @@ class _LoginScreenState extends State<LoginScreen> {
             validator: _validateCode,
             onFieldSubmitted: (_) => _submitVerify(auth),
           ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: verifyBusy ? null : () => _submitVerify(auth),
-            icon: verifyBusy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.verified_rounded),
-            label: const Text('完成验证'),
+          const SizedBox(height: Spacing.lg),
+          GlobiButton(
+            label: '完成验证',
+            icon: Icons.verified_rounded,
+            isLoading: verifyBusy,
+            onPressed: () => _submitVerify(auth),
           ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: resendBusy || _verificationCooldownRemaining > 0
-                ? null
-                : () => _resendVerification(auth),
-            icon: resendBusy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh_rounded),
-            label: Text(
-              _verificationCooldownRemaining > 0
-                  ? '重新发送 ${_cooldownLabel(_verificationCooldownRemaining)}'
-                  : '重新发送验证码',
-            ),
+          const SizedBox(height: Spacing.sm),
+          GlobiButton(
+            label: _verificationCooldownRemaining > 0
+                ? '重新发送 ${_verificationCooldownRemaining}s'
+                : '重新发送验证码',
+            icon: Icons.refresh_rounded,
+            isOutlined: true,
+            isDisabled: resendBusy || _verificationCooldownRemaining > 0,
+            onPressed: () => _resendVerification(auth),
           ),
         ],
       ),
@@ -908,14 +690,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildResetForm(BuildContext context, AuthProvider auth) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final sendBusy = auth.isLocalAuthActionInProgress(
-      LocalAuthAction.forgotPassword,
-    );
-    final resetBusy = auth.isLocalAuthActionInProgress(
-      LocalAuthAction.resetPassword,
-    );
+    final sendBusy = auth.isLocalAuthActionInProgress(LocalAuthAction.forgotPassword);
+    final resetBusy = auth.isLocalAuthActionInProgress(LocalAuthAction.resetPassword);
 
     return Form(
       key: _resetFormKey,
@@ -925,37 +701,21 @@ class _LoginScreenState extends State<LoginScreen> {
         children: [
           Text(
             '先发送验证码，再输入验证码和新密码完成重置。',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: MinimalColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: Spacing.md),
           TextFormField(
             controller: _resetEmailController,
-            decoration: InputDecoration(
-              hintText: '邮箱',
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
+            decoration: const InputDecoration(hintText: '邮箱'),
             keyboardType: TextInputType.emailAddress,
             validator: _validateEmail,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           TextFormField(
             controller: _resetCodeController,
-            decoration: InputDecoration(
-              hintText: '验证码',
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
+            decoration: const InputDecoration(hintText: '验证码'),
             keyboardType: TextInputType.number,
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
@@ -963,66 +723,37 @@ class _LoginScreenState extends State<LoginScreen> {
             ],
             validator: _validateCode,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           TextFormField(
             controller: _resetNewPasswordController,
-            decoration: InputDecoration(
-              hintText: '新密码',
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
+            decoration: const InputDecoration(hintText: '新密码'),
             obscureText: true,
             validator: (value) => _validatePassword(value, label: '新密码'),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           TextFormField(
             controller: _resetConfirmPasswordController,
-            decoration: InputDecoration(
-              hintText: '确认新密码',
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
+            decoration: const InputDecoration(hintText: '确认新密码'),
             obscureText: true,
             validator: (value) => _validatePassword(value, label: '确认新密码'),
             onFieldSubmitted: (_) => _submitReset(auth),
           ),
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: sendBusy || _resetCooldownRemaining > 0
-                ? null
-                : () => _sendResetCode(auth),
-            icon: sendBusy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.email_outlined),
-            label: Text(
-              _resetCooldownRemaining > 0
-                  ? '发送验证码 ${_cooldownLabel(_resetCooldownRemaining)}'
-                  : '发送重置验证码',
-            ),
+          const SizedBox(height: Spacing.lg),
+          GlobiButton(
+            label: _resetCooldownRemaining > 0
+                ? '发送验证码 ${_resetCooldownRemaining}s'
+                : '发送重置验证码',
+            icon: Icons.email_outlined,
+            isOutlined: true,
+            isDisabled: sendBusy || _resetCooldownRemaining > 0,
+            onPressed: () => _sendResetCode(auth),
           ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: resetBusy ? null : () => _submitReset(auth),
-            icon: resetBusy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.lock_reset_rounded),
-            label: const Text('重置密码'),
+          const SizedBox(height: Spacing.sm),
+          GlobiButton(
+            label: '重置密码',
+            icon: Icons.lock_reset_rounded,
+            isLoading: resetBusy,
+            onPressed: () => _submitReset(auth),
           ),
         ],
       ),

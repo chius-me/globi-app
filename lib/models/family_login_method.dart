@@ -1,21 +1,21 @@
-enum FamilyLoginMethod { oidc, local }
+enum FamilyLoginMethod { github, local }
 
 extension FamilyLoginMethodX on FamilyLoginMethod {
   String get storageValue => switch (this) {
-    FamilyLoginMethod.oidc => 'oidc',
+    FamilyLoginMethod.github => 'github',
     FamilyLoginMethod.local => 'local',
   };
 
   String get displayLabel => switch (this) {
-    FamilyLoginMethod.oidc => 'Authentik',
+    FamilyLoginMethod.github => 'GitHub',
     FamilyLoginMethod.local => '邮箱密码',
   };
 }
 
 FamilyLoginMethod? familyLoginMethodFromStorage(String? value) {
   switch (value?.trim().toLowerCase()) {
-    case 'oidc':
-      return FamilyLoginMethod.oidc;
+    case 'github':
+      return FamilyLoginMethod.github;
     case 'local':
       return FamilyLoginMethod.local;
     default:
@@ -25,9 +25,8 @@ FamilyLoginMethod? familyLoginMethodFromStorage(String? value) {
 
 FamilyLoginMethod? familyLoginMethodFromUserSource(String? value) {
   switch (value?.trim().toLowerCase()) {
-    case 'oidc':
-    case 'authentik':
-      return FamilyLoginMethod.oidc;
+    case 'github':
+      return FamilyLoginMethod.github;
     case 'local':
     case 'local_auth':
     case 'local-email-password':

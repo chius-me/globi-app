@@ -56,7 +56,7 @@
 			<string>auth-callback</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>flutty</string>
+				<string>globi</string>
 			</array>
 		</dict>
 	</array>

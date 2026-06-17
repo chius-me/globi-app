@@ -1,10 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../config/constants.dart';
-import '../models/auth_config.dart';
 import '../models/auth_tokens.dart';
 import '../models/current_user.dart';
 import '../models/family_login_method.dart';
@@ -14,7 +13,6 @@ import '../models/local_auth_registration_result.dart';
 import '../services/auth_api_service.dart';
 import '../services/secure_storage_service.dart';
 import '../utils/api_error.dart';
-import '../utils/pkce.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
 
@@ -36,7 +34,6 @@ class AuthProvider extends ChangeNotifier {
 
   AuthStatus _status = AuthStatus.unknown;
   CurrentUser? _user;
-  AuthConfig? _config;
   String? _errorMessage;
   bool _isLoggingIn = false;
   Future<void>? _initializeFuture;
@@ -48,11 +45,9 @@ class AuthProvider extends ChangeNotifier {
   bool _isSavingFamilyProfile = false;
   FamilyLoginMethod? _familyLoginMethod;
   LocalAuthAction? _activeLocalAuthAction;
-  Pkce? _pendingPkce;
 
   AuthStatus get status => _status;
   CurrentUser? get user => _user;
-  AuthConfig? get config => _config;
   String? get errorMessage => _errorMessage;
   bool get isLoggingIn => _isLoggingIn;
   bool get isAuthenticated => _status == AuthStatus.authenticated;
@@ -68,7 +63,6 @@ class AuthProvider extends ChangeNotifier {
       _familyProfileStatus == FamilyProfileStatus.complete;
   FamilyLoginMethod? get familyLoginMethod => _familyLoginMethod;
   bool get isLocalLogin => _familyLoginMethod == FamilyLoginMethod.local;
-  bool get isOidcLogin => _familyLoginMethod == FamilyLoginMethod.oidc;
   bool get isLocalAuthBusy => _activeLocalAuthAction != null;
 
   AuthProvider({
@@ -87,26 +81,12 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _doInitialize() async {
     try {
-      _config = await _authApi.getConfig();
-    } catch (_) {
-      // Config fetch failed; continue, login will fail later.
-    }
-
-    try {
-      final pendingPkce = await _loadPendingPkce();
-      if (pendingPkce != null) {
-        _pendingPkce = pendingPkce;
-        _isLoggingIn = true;
-      }
-
       _familyLoginMethod = await _storage.getFamilyLoginMethod();
 
       final accessToken = await _storage.getAccessToken();
       final expiresAt = await _storage.getExpiresAt();
 
-      if (accessToken != null) {
-        await _resolveStoredLoginMethod(fallbackToOidc: true);
-
+      if (accessToken != null && _familyLoginMethod != null) {
         if (expiresAt != null) {
           final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
           if (now < expiresAt) {
@@ -134,32 +114,13 @@ class AuthProvider extends ChangeNotifier {
       }
 
       _status = AuthStatus.unauthenticated;
-      if (pendingPkce == null) {
-        _isLoggingIn = false;
-      }
       notifyListeners();
     } finally {
       _initializeFuture = null;
     }
   }
 
-  Future<Pkce?> _loadPendingPkce() async {
-    final pending = await _storage.getPendingPkce();
-    if (pending == null) {
-      return null;
-    }
-
-    return Pkce.fromStored(
-      codeVerifier: pending['code_verifier']!,
-      codeChallenge: pending['code_challenge']!,
-      state: pending['state']!,
-      nonce: pending['nonce']!,
-    );
-  }
-
-  Future<FamilyLoginMethod?> _resolveStoredLoginMethod({
-    bool fallbackToOidc = false,
-  }) async {
+  Future<FamilyLoginMethod?> _resolveStoredLoginMethod() async {
     if (_familyLoginMethod != null) {
       return _familyLoginMethod;
     }
@@ -168,11 +129,6 @@ class AuthProvider extends ChangeNotifier {
     if (stored != null) {
       _familyLoginMethod = stored;
       return stored;
-    }
-
-    if (fallbackToOidc) {
-      _familyLoginMethod = FamilyLoginMethod.oidc;
-      return _familyLoginMethod;
     }
 
     return null;
@@ -185,7 +141,6 @@ class AuthProvider extends ChangeNotifier {
     await _storage.saveTokens(
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
-      idToken: tokens.idToken,
       expiresAt: tokens.expiresAt,
     );
     await _storage.saveFamilyLoginMethod(loginMethod);
@@ -218,7 +173,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<bool> _tryRefreshAndGetMe() async {
     final refreshToken = await _storage.getRefreshToken();
-    final loginMethod = await _resolveStoredLoginMethod(fallbackToOidc: true);
+    final loginMethod = await _resolveStoredLoginMethod();
     if (refreshToken == null || loginMethod == null) {
       return false;
     }
@@ -350,7 +305,7 @@ class AuthProvider extends ChangeNotifier {
       return;
     }
 
-    await _resolveStoredLoginMethod(fallbackToOidc: true);
+    await _resolveStoredLoginMethod();
 
     try {
       await _hydrateAuthenticatedSession(accessToken: accessToken);
@@ -532,7 +487,7 @@ class AuthProvider extends ChangeNotifier {
     required String newPassword,
   }) async {
     if (!isLocalLogin) {
-      _errorMessage = '当前账号不是邮箱密码登录，请前往单点登录系统修改密码。';
+      _errorMessage = '当前账号不是邮箱密码登录，不支持修改密码。';
       notifyListeners();
       return false;
     }
@@ -557,36 +512,13 @@ class AuthProvider extends ChangeNotifier {
     return result ?? false;
   }
 
-  Future<void> startLogin() {
-    return startOidcLogin();
-  }
-
-  Future<void> startOidcLogin() async {
+  Future<void> startGithubLogin() async {
     _errorMessage = null;
     _isLoggingIn = true;
     notifyListeners();
 
     try {
-      _config ??= await _authApi.getConfig();
-
-      final pkce = Pkce.generate();
-      _pendingPkce = pkce;
-      await _storage.savePendingPkce(
-        codeVerifier: pkce.codeVerifier,
-        codeChallenge: pkce.codeChallenge,
-        state: pkce.state,
-        nonce: pkce.nonce,
-      );
-
-      final authUrl = await _authApi.getAuthorizeUrl(
-        redirectUri: AppConstants.redirectUri,
-        state: pkce.state,
-        codeChallenge: pkce.codeChallenge,
-        codeChallengeMethod: 'S256',
-        scope: _config!.scopes.join(' '),
-        nonce: pkce.nonce,
-        prompt: 'login',
-      );
+      final authUrl = await _authApi.getGithubAuthorizeUrl();
 
       final uri = Uri.parse(authUrl);
       final launched = await launchUrl(
@@ -596,23 +528,17 @@ class AuthProvider extends ChangeNotifier {
       if (!launched) {
         _errorMessage = '无法打开浏览器';
         _isLoggingIn = false;
-        await _storage.clearPendingPkce();
-        _pendingPkce = null;
         notifyListeners();
       }
     } catch (error) {
       _errorMessage = resolveApiErrorMessage(error, fallback: '登录初始化失败，请稍后重试。');
       _isLoggingIn = false;
-      await _storage.clearPendingPkce();
-      _pendingPkce = null;
       notifyListeners();
     }
   }
 
-  void cancelOidcLogin() {
+  void cancelGithubLogin() {
     _isLoggingIn = false;
-    _pendingPkce = null;
-    _storage.clearPendingPkce();
     notifyListeners();
   }
 
@@ -625,62 +551,63 @@ class AuthProvider extends ChangeNotifier {
       final desc = uri.queryParameters['error_description'] ?? error;
       _errorMessage = '登录失败: $desc';
       _isLoggingIn = false;
-      _pendingPkce = null;
       _status = AuthStatus.unauthenticated;
-      await _storage.clearPendingPkce();
       notifyListeners();
       return;
     }
 
-    final code = uri.queryParameters['code'];
-    final returnedState = uri.queryParameters['state'];
-
-    if (code == null || returnedState == null) {
+    final token = uri.queryParameters['token'];
+    if (token == null || token.isEmpty) {
       _errorMessage = '无效的回调参数';
       _isLoggingIn = false;
-      _pendingPkce = null;
       _status = AuthStatus.unauthenticated;
-      await _storage.clearPendingPkce();
-      notifyListeners();
-      return;
-    }
-
-    if (_pendingPkce == null || returnedState != _pendingPkce!.state) {
-      _errorMessage = 'State 校验失败，可能存在安全风险';
-      _isLoggingIn = false;
-      _pendingPkce = null;
-      _status = AuthStatus.unauthenticated;
-      await _storage.clearPendingPkce();
       notifyListeners();
       return;
     }
 
     try {
-      final tokens = await _authApi.exchangeToken(
-        code: code,
-        redirectUri: AppConstants.redirectUri,
-        codeVerifier: _pendingPkce!.codeVerifier,
+      int expiresAt;
+      try {
+        final parts = token.split('.');
+        if (parts.length == 3) {
+          final payload = utf8.decode(
+            base64Url.decode(base64Url.normalize(parts[1])),
+          );
+          final claims = jsonDecode(payload) as Map<String, dynamic>;
+          expiresAt = (claims['exp'] as int?) ?? _defaultExpiry();
+        } else {
+          expiresAt = _defaultExpiry();
+        }
+      } catch (_) {
+        expiresAt = _defaultExpiry();
+      }
+
+      final tokens = AuthTokens(
+        accessToken: token,
+        tokenType: 'Bearer',
+        expiresIn: expiresAt - (DateTime.now().millisecondsSinceEpoch ~/ 1000),
+        expiresAt: expiresAt,
       );
 
       await _completeAuthenticatedLogin(
         tokens: tokens,
-        loginMethod: FamilyLoginMethod.oidc,
+        loginMethod: FamilyLoginMethod.github,
       );
-      await _storage.clearPendingPkce();
     } catch (error) {
       _errorMessage = resolveApiErrorMessage(error, fallback: '登录完成失败，请稍后重试。');
       await _resetSessionState(clearErrorMessage: false);
     } finally {
       _isLoggingIn = false;
-      _pendingPkce = null;
       notifyListeners();
     }
   }
 
+  static int _defaultExpiry() {
+    return DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600;
+  }
+
   Future<void> logout() async {
-    final loginMethod =
-        await _resolveStoredLoginMethod(fallbackToOidc: true) ??
-        FamilyLoginMethod.oidc;
+    final loginMethod = await _resolveStoredLoginMethod();
 
     try {
       final refreshToken = await _storage.getRefreshToken();
@@ -689,27 +616,9 @@ class AuthProvider extends ChangeNotifier {
         if (refreshToken != null && refreshToken.isNotEmpty) {
           await _authApi.logoutLocal(refreshToken: refreshToken);
         }
-      } else {
-        final idToken = await _storage.getIdToken();
-        final result = await _authApi.logout(
-          refreshToken: refreshToken,
-          idToken: idToken,
-          postLogoutRedirectUri: AppConstants.postLogoutRedirectUri.isNotEmpty
-              ? AppConstants.postLogoutRedirectUri
-              : null,
-        );
-
-        final endSessionUrl = result['end_session_url'] as String?;
-        if (endSessionUrl != null && endSessionUrl.isNotEmpty) {
-          final uri = Uri.parse(endSessionUrl);
-          final launched = await launchUrl(
-            uri,
-            mode: LaunchMode.externalApplication,
-          );
-          if (!launched) {
-            _errorMessage = '无法打开退出登录页面';
-            notifyListeners();
-          }
+      } else if (loginMethod == FamilyLoginMethod.github) {
+        if (refreshToken != null && refreshToken.isNotEmpty) {
+          await _authApi.logoutGithub(refreshToken: refreshToken);
         }
       }
     } catch (_) {
@@ -744,7 +653,6 @@ class AuthProvider extends ChangeNotifier {
     _activeLocalAuthAction = null;
     _status = AuthStatus.unauthenticated;
     _isLoggingIn = false;
-    _pendingPkce = null;
 
     if (clearErrorMessage) {
       _errorMessage = null;

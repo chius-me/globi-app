@@ -7,6 +7,9 @@ on:
     paths:
       - 'docs/API_REQUIREMENTS.md'
 
+permissions:
+  contents: read
+
 jobs:
   notify:
     runs-on: ubuntu-latest
@@ -16,22 +19,28 @@ jobs:
 
       - name: Get commit message
         id: log
-        run: echo "commit_msg=$(git log -1 --pretty=format:'%s')" >> $GITHUB_ENV
+        run: |
+          {
+            echo 'commit_msg<<EOF'
+            git log -1 --pretty=format:'%s'
+            echo
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
 
       - name: Send Telegram Notification
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
+          set -eu
           if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
             echo "Error: TG_BOT_TOKEN or TG_CHAT_ID secret is missing!"
             exit 1
           fi
-          
-          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+
+          message=$(printf '前端更新了 API 需求文档！\n\n提交说明: %s\n\n查看最新契约: https://github.com/%s/blob/main/docs/API_REQUIREMENTS.md' "$commit_msg" "$GITHUB_REPOSITORY")
+          payload=$(jq -n --arg chat_id "$TG_CHAT_ID" --arg text "$message" '{chat_id: $chat_id, text: $text}')
+
+          curl --fail-with-body -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -H "Content-Type: application/json" \
-            -d '{
-              "chat_id": "'"${TG_CHAT_ID}"'",
-              "parse_mode": "Markdown",
-              "text": "📢 *前端更新了 API 需求文档！*\n\n*提交说明*: ${{ env.commit_msg }}\n\n👉 [点击这里查看最新契约](https://github.com/${{ github.repository }}/blob/main/docs/API_REQUIREMENTS.md)"
-            }'
+            -d "$payload"

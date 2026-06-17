@@ -60,8 +60,18 @@ jobs:
       - name: Analyze Flutter project
         run: flutter analyze
 
+      - name: Run Flutter tests
+        run: flutter test
+
       - name: Build signed release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --obfuscate --split-debug-info=build/app/symbols
+
+      - name: Upload obfuscation symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: obfuscation-symbols-${{ github.ref_name }}
+          path: build/app/symbols
+          if-no-files-found: error
 
       - name: Prepare release asset
         run: |

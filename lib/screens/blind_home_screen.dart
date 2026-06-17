@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/design_tokens.dart';
 import '../config/navigation.dart';
 import '../providers/app_mode_provider.dart';
 import '../providers/blind_mode_provider.dart';
@@ -139,7 +140,6 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Consumer<BlindModeProvider>(
       builder: (context, blindMode, _) {
@@ -152,116 +152,90 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
           ),
           body: SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.all(Spacing.md),
               child: Column(
                 children: [
                   if (blindMode.errorMessage != null)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 12.0),
-                      child: Text(
-                        blindMode.errorMessage!,
-                        style: TextStyle(
-                          color: colorScheme.error,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                      padding: const EdgeInsets.only(bottom: Spacing.md),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(Spacing.lg),
+                        decoration: BoxDecoration(
+                          color: MinimalColors.accentRedBg,
+                          borderRadius: BorderRadius.circular(RadiusTokens.soft),
+                          border: Border.all(
+                            color: MinimalColors.accentRedText.withValues(alpha: 0.15),
+                          ),
                         ),
-                        textAlign: TextAlign.center,
+                        child: Text(
+                          blindMode.errorMessage!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: MinimalColors.accentRedText,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                     ),
                   Expanded(
                     child: Row(
                       children: [
-                        Expanded(
-                          child: _BigButton(
-                            icon: Icons.record_voice_over,
-                            label: '语音助手',
-                            color: colorScheme.secondaryContainer,
-                            onColor: colorScheme.onSecondaryContainer,
-                            onTap: () => Navigator.of(
-                              context,
-                            ).push(BlindAssistantScreen.route()),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _BigButton(
-                            icon: blindMode.isUploadingLocation
-                                ? Icons.sync
-                                : Icons.my_location_rounded,
-                            label: blindMode.isUploadingLocation
-                                ? '上传中'
-                                : '上传定位',
-                            color: colorScheme.tertiaryContainer,
-                            onColor: colorScheme.onTertiaryContainer,
-                            onTap: blindMode.isUploadingLocation
-                                ? null
-                                : () => blindMode.uploadCurrentLocation(
-                                    silentErrors: false,
-                                  ),
-                          ),
-                        ),
+                        Expanded(child: _BigButton(
+                          icon: Icons.record_voice_over,
+                          label: '语音助手',
+                          onTap: () => Navigator.of(context).push(BlindAssistantScreen.route()),
+                        )),
+                        const SizedBox(width: Spacing.md),
+                        Expanded(child: _BigButton(
+                          icon: blindMode.isUploadingLocation ? Icons.sync : Icons.my_location_rounded,
+                          label: blindMode.isUploadingLocation ? '上传中' : '上传定位',
+                          isLoading: blindMode.isUploadingLocation,
+                          onTap: blindMode.isUploadingLocation ? null : () => blindMode.uploadCurrentLocation(silentErrors: false),
+                        )),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: Spacing.md),
                   Expanded(
                     child: Row(
                       children: [
-                        Expanded(
-                          child: _BigButton(
-                            icon: blindMode.isCallingFamily
-                                ? Icons.sync
-                                : Icons.phone_callback_rounded,
-                            label: blindMode.isCallingFamily ? '获取中' : '呼叫家属',
-                            color: colorScheme.primaryContainer,
-                            onColor: colorScheme.onPrimaryContainer,
-                            onTap: blindMode.isCallingFamily
-                                ? null
-                                : _callFamily,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _BigButton(
-                            icon: Icons.sos_rounded,
-                            label: '呼叫SOS',
-                            color: colorScheme.errorContainer,
-                            onColor: colorScheme.onErrorContainer,
-                            onTap: () {
-                              // TODO: 预留呼叫SOS功能
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('功能开发中')),
-                              );
-                            },
-                          ),
-                        ),
+                        Expanded(child: _BigButton(
+                          icon: blindMode.isCallingFamily ? Icons.sync : Icons.phone_callback_rounded,
+                          label: blindMode.isCallingFamily ? '获取中' : '呼叫家属',
+                          isLoading: blindMode.isCallingFamily,
+                          onTap: blindMode.isCallingFamily ? null : _callFamily,
+                        )),
+                        const SizedBox(width: Spacing.md),
+                        Expanded(child: _BigButton(
+                          icon: Icons.sos_rounded,
+                          label: '呼叫SOS',
+                          isDestructive: true,
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('功能开发中')),
+                            );
+                          },
+                        )),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: Spacing.md),
                   Expanded(
                     child: Row(
                       children: [
-                        Expanded(
-                          child: _BigButton(
-                            icon: Icons.link_off_rounded,
-                            label: '重新绑定',
-                            color: colorScheme.surfaceBright,
-                            onColor: colorScheme.onSurface,
-                            onTap: _confirmClearBlindAuthorization,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _BigButton(
-                            icon: Icons.swap_horiz,
-                            label: '切换身份',
-                            color: colorScheme.surfaceDim,
-                            onColor: colorScheme.onSurface,
-                            onTap: () =>
-                                context.read<AppModeProvider>().resetMode(),
-                          ),
-                        ),
+                        Expanded(child: _BigButton(
+                          icon: Icons.link_off_rounded,
+                          label: '重新绑定',
+                          isSecondary: true,
+                          onTap: _confirmClearBlindAuthorization,
+                        )),
+                        const SizedBox(width: Spacing.md),
+                        Expanded(child: _BigButton(
+                          icon: Icons.swap_horiz,
+                          label: '切换身份',
+                          isSecondary: true,
+                          onTap: () => context.read<AppModeProvider>().resetMode(),
+                        )),
                       ],
                     ),
                   ),
@@ -278,38 +252,69 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
 class _BigButton extends StatelessWidget {
   final IconData icon;
   final String label;
-  final Color color;
-  final Color onColor;
+  final bool isLoading;
+  final bool isDestructive;
+  final bool isSecondary;
   final VoidCallback? onTap;
 
   const _BigButton({
     required this.icon,
     required this.label,
-    required this.color,
-    required this.onColor,
-    required this.onTap,
+    this.isLoading = false,
+    this.isDestructive = false,
+    this.isSecondary = false,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(32),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
+    final theme = Theme.of(context);
+
+    Color bgColor;
+    Color fgColor;
+    if (isDestructive) {
+      bgColor = MinimalColors.accentRedBg;
+      fgColor = MinimalColors.accentRedText;
+    } else if (isSecondary) {
+      bgColor = theme.colorScheme.surface;
+      fgColor = MinimalColors.textPrimary;
+    } else {
+      bgColor = theme.colorScheme.primary.withValues(alpha: 0.08);
+      fgColor = theme.colorScheme.primary;
+    }
+
+    return InkWell(
+      onTap: isLoading ? null : onTap,
+      borderRadius: BorderRadius.circular(RadiusTokens.card),
+      child: Container(
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(RadiusTokens.card),
+          border: isSecondary
+              ? Border.all(color: theme.colorScheme.outline, width: BorderTokens.thin)
+              : null,
+        ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 64, color: onColor),
-            const SizedBox(height: 16),
+            if (isLoading)
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: fgColor,
+                ),
+              )
+            else
+              Icon(icon, size: 40, color: fgColor),
+            const SizedBox(height: Spacing.md),
             Text(
               label,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: onColor,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: fgColor,
               ),
             ),
           ],

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pinput/pinput.dart';
 
+import '../config/design_tokens.dart';
 import '../providers/app_mode_provider.dart';
 import '../providers/blind_mode_provider.dart';
 import '../widgets/edge_swipe_back_container.dart';
@@ -89,14 +90,16 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return EdgeSwipeBackContainer(
       onBack: _resetToHome,
       child: Scaffold(
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            padding: const EdgeInsets.symmetric(
+              horizontal: Spacing.xl,
+              vertical: Spacing.xxl,
+            ),
             child: Consumer<BlindModeProvider>(
               builder: (context, blindMode, _) {
                 return Column(
@@ -110,12 +113,13 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
                           children: [
                             Text(
                               '请输入授权码',
-                              style: theme.textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
+                              style: theme.textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.02,
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: 32),
+                            const SizedBox(height: Spacing.xxl),
                             AnimatedBuilder(
                               animation: _shakeController,
                               builder: (context, child) {
@@ -134,29 +138,29 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
                                   defaultPinTheme: PinTheme(
                                     width: 36,
                                     height: 52,
-                                    textStyle: const TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
+                                    textStyle: theme.textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.w600,
                                     ),
                                     decoration: BoxDecoration(
-                                      color:
-                                          colorScheme.surfaceContainerHighest,
-                                      borderRadius: BorderRadius.circular(8),
+                                      color: theme.colorScheme.surface,
+                                      borderRadius: BorderRadius.circular(RadiusTokens.soft),
+                                      border: Border.all(
+                                        color: theme.colorScheme.outline,
+                                        width: BorderTokens.thin,
+                                      ),
                                     ),
                                   ),
                                   focusedPinTheme: PinTheme(
                                     width: 38,
                                     height: 54,
-                                    textStyle: const TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
+                                    textStyle: theme.textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.w600,
                                     ),
                                     decoration: BoxDecoration(
-                                      color:
-                                          colorScheme.surfaceContainerHighest,
-                                      borderRadius: BorderRadius.circular(8),
+                                      color: theme.colorScheme.surface,
+                                      borderRadius: BorderRadius.circular(RadiusTokens.soft),
                                       border: Border.all(
-                                        color: colorScheme.primary,
+                                        color: theme.colorScheme.primary,
                                         width: 2,
                                       ),
                                     ),
@@ -165,19 +169,19 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
                                     if (index == 3) {
                                       return Padding(
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
+                                          horizontal: Spacing.xs,
                                         ),
                                         child: Text(
                                           '-',
                                           style: TextStyle(
                                             fontSize: 24,
-                                            fontWeight: FontWeight.bold,
-                                            color: colorScheme.onSurfaceVariant,
+                                            fontWeight: FontWeight.w500,
+                                            color: MinimalColors.textSecondary,
                                           ),
                                         ),
                                       );
                                     }
-                                    return const SizedBox(width: 4);
+                                    return const SizedBox(width: Spacing.xs);
                                   },
                                   textCapitalization:
                                       TextCapitalization.characters,
@@ -186,25 +190,27 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 36),
+                            const SizedBox(height: Spacing.xxl),
                             SizedBox(
-                              height: 80,
+                              height: 56,
                               child: FilledButton(
                                 onPressed: blindMode.isLinking || _isSuccess
                                     ? null
                                     : _submit,
                                 style: FilledButton.styleFrom(
                                   backgroundColor: (_isError || _isSuccess)
-                                      ? Colors.red
+                                      ? MinimalColors.accentRedText
                                       : null,
                                   disabledBackgroundColor: _isSuccess
-                                      ? Colors.red
+                                      ? MinimalColors.accentRedText
                                       : null,
                                   disabledForegroundColor: _isSuccess
-                                      ? Colors.white
+                                      ? MinimalColors.textInverse
                                       : null,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(24),
+                                    borderRadius: BorderRadius.circular(
+                                      RadiusTokens.crisp,
+                                    ),
                                   ),
                                 ),
                                 child: Text(
@@ -214,7 +220,7 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
                                             ? '授权码错误'
                                             : (_isSuccess ? '授权码正确' : '确定')),
                                   style: const TextStyle(
-                                    fontSize: 28,
+                                    fontSize: 18,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -225,12 +231,12 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.only(bottom: Spacing.sm),
                       child: Text(
                         '授权码由家属账号生成',
                         textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: MinimalColors.textSecondary,
                         ),
                       ),
                     ),

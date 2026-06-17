@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../config/design_tokens.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/globi_button.dart';
+import '../widgets/globi_error_banner.dart';
 
 class FamilyChangePasswordScreen extends StatefulWidget {
   const FamilyChangePasswordScreen({super.key});
@@ -27,43 +30,33 @@ class _FamilyChangePasswordScreenState
   }
 
   String? _validatePassword(String? value, String label) {
-    if (value == null || value.isEmpty) {
-      return '请输入$label';
-    }
+    if (value == null || value.isEmpty) return '请输入$label';
     return null;
   }
 
   Future<void> _submit(AuthProvider auth) async {
-    if (!(_formKey.currentState?.validate() ?? false)) {
-      return;
-    }
-
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_newPasswordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('两次新密码输入不一致')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('两次新密码输入不一致')),
+      );
       return;
     }
-
     FocusScope.of(context).unfocus();
     final success = await auth.changeLocalPassword(
       oldPassword: _oldPasswordController.text,
       newPassword: _newPasswordController.text,
     );
-    if (!success || !mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('密码修改成功')));
+    if (!success || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('密码修改成功')),
+    );
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Consumer<AuthProvider>(
       builder: (context, auth, _) {
@@ -75,40 +68,35 @@ class _FamilyChangePasswordScreenState
           appBar: AppBar(title: const Text('修改密码')),
           body: SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(Spacing.lg),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (auth.errorMessage != null) ...[
-                    Material(
-                      color: colorScheme.errorContainer,
-                      borderRadius: BorderRadius.circular(20),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          auth.errorMessage!,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onErrorContainer,
-                          ),
-                        ),
-                      ),
+                    GlobiErrorBanner(
+                      message: auth.errorMessage!,
+                      onDismiss: auth.clearError,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: Spacing.lg),
                   ],
                   Container(
-                    padding: const EdgeInsets.all(18),
+                    padding: const EdgeInsets.all(Spacing.lg),
                     decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(24),
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(RadiusTokens.soft),
+                      border: Border.all(
+                        color: theme.colorScheme.outline,
+                        width: BorderTokens.thin,
+                      ),
                     ),
                     child: Text(
-                      '当前入口只对本地邮箱密码账号开放。Authentik 登录账号请到单点登录系统修改密码。',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                      '当前只支持本地邮箱密码账号修改密码。',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: MinimalColors.textSecondary,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: Spacing.lg),
                   Form(
                     key: _formKey,
                     child: Column(
@@ -120,14 +108,14 @@ class _FamilyChangePasswordScreenState
                           obscureText: true,
                           validator: (value) => _validatePassword(value, '旧密码'),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: Spacing.md),
                         TextFormField(
                           controller: _newPasswordController,
                           decoration: const InputDecoration(labelText: '新密码'),
                           obscureText: true,
                           validator: (value) => _validatePassword(value, '新密码'),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: Spacing.md),
                         TextFormField(
                           controller: _confirmPasswordController,
                           decoration: const InputDecoration(labelText: '确认新密码'),
@@ -136,19 +124,12 @@ class _FamilyChangePasswordScreenState
                               _validatePassword(value, '确认新密码'),
                           onFieldSubmitted: (_) => _submit(auth),
                         ),
-                        const SizedBox(height: 20),
-                        FilledButton.icon(
-                          onPressed: busy ? null : () => _submit(auth),
-                          icon: busy
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.lock_reset_rounded),
-                          label: const Text('保存新密码'),
+                        const SizedBox(height: Spacing.xl),
+                        GlobiButton(
+                          label: '保存新密码',
+                          icon: Icons.lock_reset_rounded,
+                          isLoading: busy,
+                          onPressed: () => _submit(auth),
                         ),
                       ],
                     ),

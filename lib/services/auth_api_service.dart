@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 
 import '../config/constants.dart';
-import '../models/auth_config.dart';
 import '../models/auth_tokens.dart';
 import '../models/current_user.dart';
 import '../models/family_login_method.dart';
@@ -24,57 +23,12 @@ class AuthApiService {
           ),
       _protectedDio = protectedDio;
 
-  Future<AuthConfig> getConfig() async {
-    final response = await _publicDio.get('/api/auth/config');
-    return AuthConfig.fromJson(response.data as Map<String, dynamic>);
-  }
-
-  Future<String> getAuthorizeUrl({
-    required String redirectUri,
-    required String state,
-    required String codeChallenge,
-    required String codeChallengeMethod,
-    required String scope,
-    required String nonce,
-    String? prompt,
-  }) async {
+  Future<String> getGithubAuthorizeUrl() async {
     final response = await _publicDio.post(
-      '/api/auth/authorize-url',
-      data: {
-        'redirect_uri': redirectUri,
-        'state': state,
-        'code_challenge': codeChallenge,
-        'code_challenge_method': codeChallengeMethod,
-        'scope': scope,
-        'nonce': nonce,
-        'prompt': prompt,
-      },
+      '/api/auth/oauth/github/authorize',
     );
     return (response.data as Map<String, dynamic>)['authorization_url']
         as String;
-  }
-
-  Future<AuthTokens> exchangeToken({
-    required String code,
-    required String redirectUri,
-    required String codeVerifier,
-  }) async {
-    final response = await _publicDio.post(
-      '/api/auth/token',
-      data: {
-        'code': code,
-        'redirect_uri': redirectUri,
-        'code_verifier': codeVerifier,
-      },
-    );
-    return AuthTokens.fromJson(response.data as Map<String, dynamic>);
-  }
-
-  Future<AuthTokens> refreshToken({required String refreshToken}) async {
-    return refreshFamilyToken(
-      refreshToken: refreshToken,
-      loginMethod: FamilyLoginMethod.oidc,
-    );
   }
 
   Future<AuthTokens> refreshFamilyToken({
@@ -82,7 +36,7 @@ class AuthApiService {
     required FamilyLoginMethod loginMethod,
   }) async {
     final path = switch (loginMethod) {
-      FamilyLoginMethod.oidc => '/api/auth/refresh',
+      FamilyLoginMethod.github => '/api/auth/oauth/github/refresh',
       FamilyLoginMethod.local => '/api/auth/local/refresh',
     };
 
@@ -93,23 +47,11 @@ class AuthApiService {
     return AuthTokens.fromJson(response.data as Map<String, dynamic>);
   }
 
-  Future<Map<String, dynamic>> logout({
-    String? refreshToken,
-    String? idToken,
-    String? postLogoutRedirectUri,
-  }) async {
-    final response = await _publicDio.post(
-      '/api/auth/logout',
-      data: {
-        'refresh_token': refreshToken,
-        'id_token': idToken,
-        'post_logout_redirect_uri':
-            postLogoutRedirectUri != null && postLogoutRedirectUri.isNotEmpty
-            ? postLogoutRedirectUri
-            : null,
-      },
+  Future<void> logoutGithub({required String refreshToken}) async {
+    await _publicDio.post(
+      '/api/auth/oauth/github/logout',
+      data: {'refresh_token': refreshToken},
     );
-    return response.data as Map<String, dynamic>;
   }
 
   Future<void> logoutLocal({required String refreshToken}) async {

@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../config/design_tokens.dart';
 import '../models/blind_link_code.dart';
 import '../models/family_blind_user.dart';
 import '../providers/app_mode_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/family_blind_provider.dart';
+import '../widgets/globi_button.dart';
+import '../widgets/globi_card.dart';
+import '../widgets/globi_error_banner.dart';
 import 'family_change_password_screen.dart';
 import 'family_blind_user_location_screen.dart';
 
@@ -17,6 +22,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  int _currentTabIndex = 0;
   final TextEditingController _blindUserNameController =
       TextEditingController();
 
@@ -24,9 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       context.read<FamilyBlindProvider>().refreshBlindUsers();
     });
   }
@@ -39,9 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refreshHome(AuthProvider auth) async {
     await auth.refreshAuthenticatedSession();
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     await context.read<FamilyBlindProvider>().refreshBlindUsers();
   }
 
@@ -52,114 +54,77 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showCopySnackbar(String code) {
+    Clipboard.setData(ClipboardData(text: code));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('授权码已复制')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return Consumer2<AuthProvider, FamilyBlindProvider>(
       builder: (context, auth, familyBlind, _) {
-        return Scaffold(
-          body: RefreshIndicator(
-            onRefresh: () => _refreshHome(auth),
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverAppBar(
-                  pinned: true,
-                  title: const Text('家属主页'),
-                  actions: [
-                    if (auth.isLocalLogin)
-                      IconButton(
-                        icon: const Icon(Icons.password_rounded),
-                        tooltip: '修改密码',
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  const FamilyChangePasswordScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    IconButton(
-                      icon: const Icon(Icons.logout),
-                      tooltip: '退出',
-                      onPressed: () => _confirmLogout(context, auth),
-                    ),
-                  ],
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.all(16),
-                  sliver: SliverList.list(
-                    children: [
-                      if (familyBlind.errorMessage != null) ...[
-                        _BentoCard(
-                          color: colorScheme.errorContainer,
-                          onColor: colorScheme.onErrorContainer,
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.error_outline,
-                                color: colorScheme.onErrorContainer,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  familyBlind.errorMessage!,
-                                  style: theme.textTheme.bodyLarge?.copyWith(
-                                    color: colorScheme.onErrorContainer,
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: familyBlind.clearError,
-                                icon: const Icon(Icons.close),
-                                color: colorScheme.onErrorContainer,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      _BlindLinkGeneratorCard(
-                        controller: _blindUserNameController,
-                        latestLinkCode: familyBlind.latestLinkCode,
-                        isSubmitting: familyBlind.isCreatingLinkCode,
-                        onGenerate: () => _generateBlindLinkCode(familyBlind),
-                      ),
-                      const SizedBox(height: 12),
-                      _BoundBlindUsersCard(
-                        blindUsers: familyBlind.blindUsers,
-                        isLoading: familyBlind.isLoadingBlindUsers,
-                        onRefresh: familyBlind.refreshBlindUsers,
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: familyBlind.isLoadingBlindUsers
-                              ? null
-                              : () => _refreshHome(auth),
-                          icon: familyBlind.isLoadingBlindUsers
-                              ? SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: colorScheme.onPrimary,
-                                  ),
-                                )
-                              : const Icon(Icons.refresh_rounded),
-                          label: const Text('刷新数据'),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-                ),
-              ],
+        final pages = <Widget>[
+          _AuthorizationTab(
+            controller: _blindUserNameController,
+            latestLinkCode: familyBlind.latestLinkCode,
+            isSubmitting: familyBlind.isCreatingLinkCode,
+            errorMessage: familyBlind.errorMessage,
+            onGenerate: () => _generateBlindLinkCode(familyBlind),
+            onDismissError: familyBlind.clearError,
+            onCopy: () => _showCopySnackbar(
+              familyBlind.latestLinkCode!.authorizationCode,
             ),
+          ),
+          _BoundUsersTab(
+            blindUsers: familyBlind.blindUsers,
+            isLoading: familyBlind.isLoadingBlindUsers,
+            onRefresh: familyBlind.refreshBlindUsers,
+          ),
+          _SettingsTab(
+            isLocalLogin: auth.isLocalLogin,
+            onRefresh: () => _refreshHome(auth),
+            onChangePassword: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const FamilyChangePasswordScreen(),
+                ),
+              );
+            },
+            onLogout: () => _confirmLogout(context, auth),
+          ),
+        ];
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('家属主页'),
+          ),
+          body: IndexedStack(
+            index: _currentTabIndex,
+            children: pages,
+          ),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _currentTabIndex,
+            onDestinationSelected: (index) =>
+                setState(() => _currentTabIndex = index),
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.qr_code_rounded),
+                label: '授权码',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.groups_outlined),
+                selectedIcon: Icon(Icons.groups_rounded),
+                label: '已绑定',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.settings_outlined),
+                selectedIcon: Icon(Icons.settings_rounded),
+                label: '设置',
+              ),
+            ],
           ),
         );
       },
@@ -182,9 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Navigator.of(ctx).pop();
               context.read<FamilyBlindProvider>().clearState();
               await auth.logout();
-              if (!context.mounted) {
-                return;
-              }
+              if (!context.mounted) return;
               await context.read<AppModeProvider>().resetMode();
             },
             child: const Text('退出'),
@@ -195,140 +158,145 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _BlindLinkGeneratorCard extends StatelessWidget {
+class _AuthorizationTab extends StatelessWidget {
   final TextEditingController controller;
   final BlindLinkCode? latestLinkCode;
   final bool isSubmitting;
+  final String? errorMessage;
   final VoidCallback onGenerate;
+  final VoidCallback onDismissError;
+  final VoidCallback onCopy;
 
-  const _BlindLinkGeneratorCard({
+  const _AuthorizationTab({
     required this.controller,
     required this.latestLinkCode,
     required this.isSubmitting,
+    required this.errorMessage,
     required this.onGenerate,
+    required this.onDismissError,
+    required this.onCopy,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
-    return _BentoCard(
-      color: colorScheme.primaryContainer,
-      onColor: colorScheme.onPrimaryContainer,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        Spacing.lg, Spacing.lg, Spacing.lg, Spacing.xxl,
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.qr_code_rounded,
-                color: colorScheme.onPrimaryContainer,
+          if (errorMessage != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Spacing.md),
+              child: GlobiErrorBanner(
+                message: errorMessage!,
+                onDismiss: onDismissError,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  '生成授权码',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.bold,
+            ),
+          GlobiCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GlobiCardHeader(
+                  leading: Icon(
+                    Icons.qr_code_rounded,
+                    color: theme.colorScheme.primary,
                   ),
+                  title: '生成授权码',
+                  subtitle: '输入姓名后生成一次性授权码。',
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '输入姓名后生成一次性授权码。',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: controller,
-            decoration: InputDecoration(
-              labelText: '盲人用户姓名',
-              hintText: '例如 张三',
-              filled: true,
-              fillColor: colorScheme.surface,
-              border: const OutlineInputBorder(),
-            ),
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => onGenerate(),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: isSubmitting ? null : onGenerate,
-              icon: isSubmitting
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: colorScheme.onPrimary,
-                      ),
-                    )
-                  : const Icon(Icons.add_link_rounded),
-              label: Text(latestLinkCode == null ? '生成授权码' : '重新生成授权码'),
-            ),
-          ),
-          if (latestLinkCode != null) ...[
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    latestLinkCode!.authorizationCode,
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
+                const SizedBox(height: Spacing.lg),
+                TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    labelText: '盲人用户姓名',
+                    hintText: '例如 张三',
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '对象：${latestLinkCode!.blindUserName}',
-                    style: theme.textTheme.bodyLarge,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '到期：${_formatDateTime(latestLinkCode!.expiresAt)}',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  if (latestLinkCode!.expiresIn != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '有效期：${latestLinkCode!.expiresIn} 秒',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => onGenerate(),
+                ),
+                const SizedBox(height: Spacing.md),
+                GlobiButton(
+                  label: latestLinkCode == null ? '生成授权码' : '重新生成授权码',
+                  icon: Icons.add_link_rounded,
+                  isLoading: isSubmitting,
+                  onPressed: onGenerate,
+                ),
+                if (latestLinkCode != null) ...[
+                  const SizedBox(height: Spacing.lg),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(Spacing.lg),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(RadiusTokens.soft),
+                      border: Border.all(
+                        color: theme.colorScheme.outline,
+                        width: BorderTokens.thin,
                       ),
                     ),
-                  ],
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                latestLinkCode!.authorizationCode,
+                                style: theme.textTheme.headlineMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.5,
+                                  fontFamily: 'Geist Mono',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: Spacing.sm),
+                            IconButton(
+                              onPressed: onCopy,
+                              icon: const Icon(Icons.copy_rounded),
+                              tooltip: '复制授权码',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: Spacing.sm),
+                        _InfoRow(
+                          label: '对象',
+                          value: latestLinkCode!.blindUserName,
+                        ),
+                        const SizedBox(height: Spacing.xs),
+                        _InfoRow(
+                          label: '到期',
+                          value: _formatDateTime(latestLinkCode!.expiresAt),
+                        ),
+                        if (latestLinkCode!.expiresIn != null) ...[
+                          const SizedBox(height: Spacing.xs),
+                          _InfoRow(
+                            label: '有效期',
+                            value: '${latestLinkCode!.expiresIn} 秒',
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ],
-              ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _BoundBlindUsersCard extends StatelessWidget {
+class _BoundUsersTab extends StatelessWidget {
   final List<FamilyBlindUser> blindUsers;
   final bool isLoading;
   final Future<void> Function() onRefresh;
 
-  const _BoundBlindUsersCard({
+  const _BoundUsersTab({
     required this.blindUsers,
     required this.isLoading,
     required this.onRefresh,
@@ -337,59 +305,205 @@ class _BoundBlindUsersCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
-    return _BentoCard(
-      color: colorScheme.surfaceContainerHigh,
-      onColor: colorScheme.onSurface,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        Spacing.lg, Spacing.lg, Spacing.lg, Spacing.xxl,
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Icon(Icons.groups_rounded, color: colorScheme.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  '已绑定盲人用户',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+          GlobiCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GlobiCardHeader(
+                  leading: Icon(
+                    Icons.groups_rounded,
+                    color: theme.colorScheme.primary,
+                  ),
+                  title: '已绑定盲人用户',
+                  trailing: IconButton(
+                    onPressed: isLoading ? null : onRefresh,
+                    icon: isLoading
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: theme.colorScheme.primary,
+                            ),
+                          )
+                        : const Icon(Icons.refresh_rounded, size: 20),
                   ),
                 ),
-              ),
-              IconButton(
-                onPressed: isLoading ? null : onRefresh,
-                icon: isLoading
-                    ? SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: colorScheme.primary,
+                const SizedBox(height: Spacing.sm),
+                if (blindUsers.isEmpty && !isLoading)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: Spacing.lg),
+                    child: Center(
+                      child: Text(
+                        '暂无已绑定用户。\n完成首次绑定后，这里会显示列表。',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: MinimalColors.textSecondary,
                         ),
-                      )
-                    : const Icon(Icons.refresh_rounded),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (blindUsers.isEmpty && !isLoading)
-            Text('暂无已绑定用户。完成首次绑定后，这里会显示列表。', style: theme.textTheme.bodyLarge)
-          else
-            Column(
-              children: [
-                for (var index = 0; index < blindUsers.length; index++) ...[
-                  _BlindUserTile(blindUser: blindUsers[index]),
-                  if (index != blindUsers.length - 1)
-                    Divider(
-                      height: 20,
-                      color: colorScheme.outline.withValues(alpha: 0.16),
+                      ),
                     ),
-                ],
+                  )
+                else
+                  Column(
+                    children: [
+                      for (var index = 0; index < blindUsers.length; index++) ...[
+                        _BlindUserTile(blindUser: blindUsers[index]),
+                        if (index != blindUsers.length - 1)
+                          const Divider(),
+                      ],
+                    ],
+                  ),
               ],
             ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _SettingsTab extends StatelessWidget {
+  final bool isLocalLogin;
+  final VoidCallback onRefresh;
+  final VoidCallback onChangePassword;
+  final VoidCallback onLogout;
+
+  const _SettingsTab({
+    required this.isLocalLogin,
+    required this.onRefresh,
+    required this.onChangePassword,
+    required this.onLogout,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        Spacing.lg, Spacing.lg, Spacing.lg, Spacing.xxl,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          GlobiCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GlobiCardHeader(
+                  leading: Icon(
+                    Icons.settings_rounded,
+                    color: theme.colorScheme.primary,
+                  ),
+                  title: '设置',
+                ),
+                const SizedBox(height: Spacing.sm),
+                _SettingsTile(
+                  icon: Icons.refresh_rounded,
+                  title: '刷新数据',
+                  onTap: onRefresh,
+                ),
+                if (isLocalLogin) ...[
+                  const Divider(),
+                  _SettingsTile(
+                    icon: Icons.password_rounded,
+                    title: '修改密码',
+                    onTap: onChangePassword,
+                  ),
+                ],
+                const Divider(),
+                _SettingsTile(
+                  icon: Icons.logout_rounded,
+                  title: '退出登录',
+                  titleColor: theme.colorScheme.error,
+                  onTap: onLogout,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Color? titleColor;
+  final VoidCallback onTap;
+
+  const _SettingsTile({
+    required this.icon,
+    required this.title,
+    this.titleColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(RadiusTokens.soft),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          vertical: Spacing.md,
+          horizontal: Spacing.sm,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: titleColor ?? theme.colorScheme.onSurface),
+            const SizedBox(width: Spacing.md),
+            Expanded(
+              child: Text(
+                title,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: titleColor,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: MinimalColors.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _InfoRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: MinimalColors.textSecondary,
+          ),
+        ),
+        const SizedBox(width: Spacing.sm),
+        Text(value, style: theme.textTheme.bodyMedium),
+      ],
     );
   }
 }
@@ -405,44 +519,60 @@ class _BlindUserTile extends StatelessWidget {
     final location = blindUser.latestLocation;
     final locationText = location == null
         ? '暂无定位'
-        : '最近定位 ${location.latitude.toStringAsFixed(5)}, ${location.longitude.toStringAsFixed(5)}';
+        : '${location.latitude.toStringAsFixed(5)}, ${location.longitude.toStringAsFixed(5)}';
 
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: () => Navigator.of(
-        context,
-      ).push(FamilyBlindUserLocationScreen.route(blindUser: blindUser)),
+      borderRadius: BorderRadius.circular(RadiusTokens.soft),
+      onTap: () => Navigator.of(context).push(
+        FamilyBlindUserLocationScreen.route(blindUser: blindUser),
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             CircleAvatar(
-              radius: 22,
-              child: Text(blindUser.blindUserName.characters.first),
+              radius: 20,
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+              child: Text(
+                blindUser.blindUserName.characters.first,
+                style: TextStyle(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: Spacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     blindUser.blindUserName,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     '最近在线：${_formatDateTime(blindUser.lastSeenAt)}',
-                    style: theme.textTheme.bodyMedium,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: MinimalColors.textSecondary,
+                    ),
                   ),
-                  Text(locationText, style: theme.textTheme.bodySmall),
+                  Text(
+                    locationText,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: MinimalColors.textSecondary,
+                    ),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(Icons.chevron_right_rounded),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: MinimalColors.textSecondary,
+              size: 20,
+            ),
           ],
         ),
       ),
@@ -451,35 +581,11 @@ class _BlindUserTile extends StatelessWidget {
 }
 
 String _formatDateTime(DateTime? value) {
-  if (value == null) {
-    return '暂无';
-  }
+  if (value == null) return '暂无';
   final local = value.toLocal();
   final month = local.month.toString().padLeft(2, '0');
   final day = local.day.toString().padLeft(2, '0');
   final hour = local.hour.toString().padLeft(2, '0');
   final minute = local.minute.toString().padLeft(2, '0');
   return '${local.year}-$month-$day $hour:$minute';
-}
-
-class _BentoCard extends StatelessWidget {
-  final Color color;
-  final Color onColor;
-  final Widget child;
-
-  const _BentoCard({
-    required this.color,
-    required this.onColor,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(24),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(padding: const EdgeInsets.all(20), child: child),
-    );
-  }
 }
