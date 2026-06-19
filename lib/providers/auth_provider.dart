@@ -582,11 +582,17 @@ class AuthProvider extends ChangeNotifier {
         expiresAt = _defaultExpiry();
       }
 
+      final refreshToken = uri.queryParameters['refresh_token'];
+      final expiresAtParam = int.tryParse(uri.queryParameters['expires_at'] ?? '');
+
       final tokens = AuthTokens(
         accessToken: token,
         tokenType: 'Bearer',
-        expiresIn: expiresAt - (DateTime.now().millisecondsSinceEpoch ~/ 1000),
-        expiresAt: expiresAt,
+        expiresIn:
+            (expiresAtParam ?? expiresAt) -
+            (DateTime.now().millisecondsSinceEpoch ~/ 1000),
+        expiresAt: expiresAtParam ?? expiresAt,
+        refreshToken: refreshToken,
       );
 
       await _completeAuthenticatedLogin(
