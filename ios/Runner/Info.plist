@@ -62,6 +62,13 @@
 	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>comgooglemaps</string>
+		<string>iosamap</string>
+		<string>baidumap</string>
+		<string>qqmap</string>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>需要定位权限来上报盲人当前位置给已授权家属查看。</string>
 	<key>NSMicrophoneUsageDescription</key>

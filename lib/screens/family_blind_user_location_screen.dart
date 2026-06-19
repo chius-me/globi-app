@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -112,11 +113,133 @@ class _FamilyBlindUserLocationScreenState
         (_mapResponse?.staleAfterSeconds ?? 30);
   }
 
-  Future<void> _openMap(BlindLocation location) async {
-    final uri = Uri.parse(
-      'https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}',
+  Future<void> _showMapOptions(BlindLocation location) async {
+    final options = await _buildMapLaunchOptions(location);
+    if (!mounted) {
+      return;
+    }
+
+    if (options.isEmpty) {
+      _showMapLaunchError();
+      return;
+    }
+
+    final selected = await showModalBottomSheet<_MapLaunchOption>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+                child: Text(
+                  '选择地图应用',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              for (final option in options)
+                ListTile(
+                  leading: Icon(option.icon),
+                  title: Text(option.label),
+                  subtitle: option.subtitle == null ? null : Text(option.subtitle!),
+                  onTap: () => Navigator.of(context).pop(option),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
     );
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+    if (selected == null || !mounted) {
+      return;
+    }
+
+    final launched = await launchUrl(
+      selected.uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched && mounted) {
+      _showMapLaunchError();
+    }
+  }
+
+  Future<List<_MapLaunchOption>> _buildMapLaunchOptions(
+    BlindLocation location,
+  ) async {
+    final lat = location.latitude;
+    final lng = location.longitude;
+    final encodedName = Uri.encodeComponent(widget.blindUser.blindUserName);
+    final label = '${widget.blindUser.blindUserName}的位置';
+    final encodedLabel = Uri.encodeComponent(label);
+
+    final candidates = <_MapLaunchOption>[
+      if (Platform.isAndroid)
+        _MapLaunchOption(
+          label: '系统默认地图',
+          subtitle: '使用系统选择器打开',
+          icon: Icons.map_rounded,
+          uri: Uri.parse('geo:$lat,$lng?q=$lat,$lng($encodedName)'),
+        ),
+      if (Platform.isIOS)
+        _MapLaunchOption(
+          label: 'Apple 地图',
+          icon: Icons.map_rounded,
+          uri: Uri.parse('https://maps.apple.com/?ll=$lat,$lng&q=$encodedLabel'),
+        ),
+      _MapLaunchOption(
+        label: 'Google 地图',
+        icon: Icons.public_rounded,
+        uri: Uri.parse('comgooglemaps://?q=$lat,$lng'),
+      ),
+      _MapLaunchOption(
+        label: '高德地图',
+        icon: Icons.navigation_rounded,
+        uri: Uri.parse(
+          '${Platform.isIOS ? 'iosamap' : 'androidamap'}://viewMap?sourceApplication=globi&poiname=$encodedLabel&lat=$lat&lon=$lng&dev=0',
+        ),
+      ),
+      _MapLaunchOption(
+        label: '百度地图',
+        icon: Icons.location_on_rounded,
+        uri: Uri.parse(
+          'baidumap://map/marker?location=$lat,$lng&title=$encodedLabel&content=$encodedLabel',
+        ),
+      ),
+      _MapLaunchOption(
+        label: '腾讯地图',
+        icon: Icons.near_me_rounded,
+        uri: Uri.parse(
+          'qqmap://map/marker?marker=coord:$lat,$lng;title:$encodedLabel',
+        ),
+      ),
+      _MapLaunchOption(
+        label: '浏览器打开地图',
+        subtitle: '无需安装地图应用',
+        icon: Icons.open_in_browser_rounded,
+        uri: Uri.parse(
+          'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
+        ),
+        alwaysShow: true,
+      ),
+    ];
+
+    final available = <_MapLaunchOption>[];
+    for (final option in candidates) {
+      if (option.alwaysShow || await canLaunchUrl(option.uri)) {
+        available.add(option);
+      }
+    }
+    return available;
+  }
+
+  void _showMapLaunchError() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('无法打开地图应用，请稍后重试。')),
+    );
   }
 
   Future<void> _confirmDeleteBlindUser() async {
@@ -398,9 +521,9 @@ class _FamilyBlindUserLocationScreenState
                       children: [
                         if (effectiveLocation != null)
                           OutlinedButton.icon(
-                            onPressed: () => _openMap(effectiveLocation),
-                            icon: const Icon(Icons.open_in_new_rounded),
-                            label: const Text('打开外部地图'),
+                            onPressed: () => _showMapOptions(effectiveLocation),
+                            icon: const Icon(Icons.map_rounded),
+                            label: const Text('选择地图导航'),
                           ),
                         if (effectiveLocation != null)
                           const SizedBox(height: 12),
@@ -449,6 +572,22 @@ class _FamilyBlindUserLocationScreenState
       ),
     );
   }
+}
+
+class _MapLaunchOption {
+  final String label;
+  final String? subtitle;
+  final IconData icon;
+  final Uri uri;
+  final bool alwaysShow;
+
+  const _MapLaunchOption({
+    required this.label,
+    required this.icon,
+    required this.uri,
+    this.subtitle,
+    this.alwaysShow = false,
+  });
 }
 
 class _SectionCard extends StatelessWidget {
