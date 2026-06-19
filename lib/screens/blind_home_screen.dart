@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -283,41 +284,54 @@ class _BigButton extends StatelessWidget {
       fgColor = theme.colorScheme.primary;
     }
 
-    return InkWell(
-      onTap: isLoading ? null : onTap,
-      borderRadius: BorderRadius.circular(RadiusTokens.card),
-      child: Container(
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(RadiusTokens.card),
-          border: isSecondary
-              ? Border.all(color: theme.colorScheme.outline, width: BorderTokens.thin)
-              : null,
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (isLoading)
-              SizedBox(
-                width: 32,
-                height: 32,
-                child: CircularProgressIndicator(
-                  strokeWidth: 3,
+    final effectiveOnTap = (isLoading || onTap == null)
+        ? null
+        : () {
+            HapticFeedback.mediumImpact();
+            onTap!();
+          };
+
+    return Semantics(
+      button: true,
+      label: label,
+      hint: '双击以激活',
+      enabled: effectiveOnTap != null,
+      child: InkWell(
+        onTap: effectiveOnTap,
+        borderRadius: BorderRadius.circular(RadiusTokens.card),
+        child: Container(
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(RadiusTokens.card),
+            border: isSecondary
+                ? Border.all(color: theme.colorScheme.outline, width: BorderTokens.thin)
+                : null,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (isLoading)
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: fgColor,
+                  ),
+                )
+              else
+                Icon(icon, size: 40, color: fgColor),
+              const SizedBox(height: Spacing.md),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
                   color: fgColor,
                 ),
-              )
-            else
-              Icon(icon, size: 40, color: fgColor),
-            const SizedBox(height: Spacing.md),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: fgColor,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

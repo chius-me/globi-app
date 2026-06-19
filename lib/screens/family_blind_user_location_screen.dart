@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/design_tokens.dart';
 import '../models/blind_location.dart';
 import '../models/family_blind_user.dart';
 import '../models/family_blind_user_map.dart';
@@ -296,7 +297,8 @@ class _FamilyBlindUserLocationScreenState
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(RadiusTokens.card),
+          border: Border.all(color: colorScheme.outline, width: BorderTokens.thin),
         ),
         child: Text('暂无定位', style: theme.textTheme.bodyLarge),
       );
@@ -304,11 +306,15 @@ class _FamilyBlindUserLocationScreenState
 
     final point = LatLng(location.latitude, location.longitude);
 
-    return SizedBox(
+    return Container(
       height: 280,
       width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(RadiusTokens.card),
+        border: Border.all(color: colorScheme.outline, width: BorderTokens.thin),
+      ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(RadiusTokens.card),
         child: FlutterMap(
           key: ValueKey(
             '${location.latitude}_${location.longitude}_${location.updatedAt}',
@@ -603,10 +609,13 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(24),
-      child: Padding(padding: const EdgeInsets.all(20), child: child),
+    return Container(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(RadiusTokens.card),
+        border: Border.all(color: color.withValues(alpha: 0.0), width: 0),
+      ),
+      child: Padding(padding: const EdgeInsets.all(Spacing.lg), child: child),
     );
   }
 }

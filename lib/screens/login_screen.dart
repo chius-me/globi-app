@@ -278,13 +278,17 @@ class _LoginScreenState extends State<LoginScreen> {
                         width: 88,
                         height: 88,
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                          color: MinimalColors.lightSurface,
                           borderRadius: BorderRadius.circular(RadiusTokens.card),
+                          border: Border.all(
+                            color: BorderTokens.light,
+                            width: BorderTokens.thin,
+                          ),
                         ),
                         child: Icon(
                           Icons.public_rounded,
                           size: 44,
-                          color: theme.colorScheme.primary,
+                          color: MinimalColors.textPrimary,
                         ),
                       ),
                     ),
@@ -402,10 +406,10 @@ class _LoginScreenState extends State<LoginScreen> {
         Container(
           padding: const EdgeInsets.all(Spacing.xl),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
+            color: MinimalColors.lightSurface,
             borderRadius: BorderRadius.circular(RadiusTokens.card),
             border: Border.all(
-              color: theme.colorScheme.outline,
+              color: BorderTokens.light,
               width: BorderTokens.thin,
             ),
           ),
@@ -455,7 +459,7 @@ class _LoginScreenState extends State<LoginScreen> {
     VoidCallback? onCancel,
   }) {
     final theme = Theme.of(context);
-    final resolvedBackground = backgroundColor ?? theme.colorScheme.surface;
+    final resolvedBackground = backgroundColor ?? MinimalColors.lightSurface;
     final resolvedForeground = foregroundColor ?? MinimalColors.textPrimary;
 
     return InkWell(
@@ -467,7 +471,7 @@ class _LoginScreenState extends State<LoginScreen> {
           color: resolvedBackground,
           borderRadius: BorderRadius.circular(RadiusTokens.soft),
           border: Border.all(
-            color: theme.colorScheme.outline,
+            color: BorderTokens.light,
             width: BorderTokens.thin,
           ),
         ),
@@ -477,8 +481,12 @@ class _LoginScreenState extends State<LoginScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: resolvedForeground.withValues(alpha: 0.08),
+                color: MinimalColors.lightBg,
                 borderRadius: BorderRadius.circular(RadiusTokens.crisp),
+                border: Border.all(
+                  color: BorderTokens.light,
+                  width: BorderTokens.thin,
+                ),
               ),
               child: Center(
                 child: isLoading

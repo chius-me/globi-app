@@ -9,6 +9,9 @@ class Spacing {
   static const double xl = 24;
   static const double xxl = 32;
   static const double xxxl = 48;
+
+  // Minimum recommended touch target size for accessibility (blind/low-vision)
+  static const double minTapTarget = 48;
 }
 
 class RadiusTokens {

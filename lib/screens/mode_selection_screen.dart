@@ -87,7 +87,7 @@ class _ModeCard extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(Spacing.xl),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
+            color: MinimalColors.lightSurface,
             borderRadius: BorderRadius.circular(RadiusTokens.card),
             border: Border.all(color: borderColor, width: BorderTokens.thin),
           ),
@@ -97,10 +97,11 @@ class _ModeCard extends StatelessWidget {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                  color: MinimalColors.lightBg,
                   borderRadius: BorderRadius.circular(RadiusTokens.soft),
+                  border: Border.all(color: borderColor, width: BorderTokens.thin),
                 ),
-                child: Icon(icon, size: 28, color: theme.colorScheme.primary),
+                child: Icon(icon, size: 28, color: MinimalColors.textPrimary),
               ),
               const SizedBox(width: Spacing.lg),
               Expanded(

@@ -98,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ];
 
         return Scaffold(
+          backgroundColor: MinimalColors.lightBg,
           appBar: AppBar(
             title: const Text('家属主页'),
           ),
@@ -521,6 +522,8 @@ class _BlindUserTile extends StatelessWidget {
         ? '暂无定位'
         : '${location.latitude.toStringAsFixed(5)}, ${location.longitude.toStringAsFixed(5)}';
 
+    final isFresh = location != null && !_isLocationStale(blindUser);
+
     return InkWell(
       borderRadius: BorderRadius.circular(RadiusTokens.soft),
       onTap: () => Navigator.of(context).push(
@@ -546,11 +549,39 @@ class _BlindUserTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    blindUser.blindUserName,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          blindUser.blindUserName,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: Spacing.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isFresh
+                              ? MinimalColors.accentGreenBg
+                              : MinimalColors.accentRedBg,
+                          borderRadius: BorderRadius.circular(RadiusTokens.pill),
+                        ),
+                        child: Text(
+                          isFresh ? '最新' : '离线',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: isFresh
+                                ? MinimalColors.accentGreenText
+                                : MinimalColors.accentRedText,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -578,6 +609,13 @@ class _BlindUserTile extends StatelessWidget {
       ),
     );
   }
+}
+
+bool _isLocationStale(FamilyBlindUser user) {
+  final loc = user.latestLocation;
+  final updated = loc?.updatedAt ?? loc?.capturedAt;
+  if (loc == null || updated == null) return true;
+  return DateTime.now().toUtc().difference(updated).inSeconds > 30;
 }
 
 String _formatDateTime(DateTime? value) {
