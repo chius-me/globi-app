@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/design_tokens.dart';
 import '../models/blind_location.dart';
 import '../models/family_blind_user.dart';
+import '../models/family_blind_user_geofence.dart';
 import '../models/family_blind_user_map.dart';
 import '../providers/family_blind_provider.dart';
 import '../utils/api_error.dart';
@@ -33,6 +34,8 @@ class FamilyBlindUserLocationScreen extends StatefulWidget {
 class _FamilyBlindUserLocationScreenState
     extends State<FamilyBlindUserLocationScreen> {
   FamilyBlindUserMap? _mapResponse;
+  List<BlindLocation> _routeHistory = const [];
+  List<FamilyBlindUserGeofence> _geofences = const [];
   String? _errorMessage;
   bool _isLoading = false;
   Timer? _refreshTimer;
@@ -42,12 +45,14 @@ class _FamilyBlindUserLocationScreenState
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshLocation();
+      context.read<FamilyBlindProvider>().connectLocationUpdates(widget.blindUser.blindUserId);
     });
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    unawaited(context.read<FamilyBlindProvider>().disconnectLocationUpdates());
     super.dispose();
   }
 
@@ -67,6 +72,7 @@ class _FamilyBlindUserLocationScreenState
       setState(() {
         _mapResponse = result;
       });
+      await _refreshRouteHistoryAndGeofences();
       if (reschedule) {
         _scheduleRefresh(result.refreshIntervalSeconds);
       }
@@ -165,6 +171,40 @@ class _FamilyBlindUserLocationScreenState
     );
     if (!launched && mounted) {
       _showMapLaunchError();
+    }
+  }
+
+  Future<void> _refreshRouteHistoryAndGeofences() async {
+    final provider = context.read<FamilyBlindProvider>();
+    final history = await provider.getBlindUserRouteHistory(widget.blindUser.blindUserId);
+    final geofences = await provider.listBlindUserGeofences(widget.blindUser.blindUserId);
+    if (!mounted) return;
+    setState(() {
+      _routeHistory = history.locations;
+      _geofences = geofences;
+    });
+  }
+
+  Future<void> _createSafeZone(BlindLocation location) async {
+    try {
+      await context.read<FamilyBlindProvider>().createBlindUserGeofence(
+        blindUserId: widget.blindUser.blindUserId,
+        label: '${widget.blindUser.blindUserName}的当前位置安全区',
+        latitude: location.latitude,
+        longitude: location.longitude,
+        radiusMeters: 500,
+      );
+      if (!mounted) return;
+      await _refreshRouteHistoryAndGeofences();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已创建 500 米安全区域')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('安全区域创建失败，请稍后重试。')),
+      );
     }
   }
 
@@ -305,6 +345,9 @@ class _FamilyBlindUserLocationScreenState
     }
 
     final point = LatLng(location.latitude, location.longitude);
+    final routePoints = _routeHistory
+        .map((item) => LatLng(item.latitude, item.longitude))
+        .toList(growable: false);
 
     return Container(
       height: 280,
@@ -325,6 +368,30 @@ class _FamilyBlindUserLocationScreenState
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'cn.tamochi.globi_mobile',
             ),
+            if (routePoints.length >= 2)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: routePoints,
+                    color: MinimalColors.accentBlueText,
+                    strokeWidth: 4,
+                  ),
+                ],
+              ),
+            if (_geofences.isNotEmpty)
+              CircleLayer(
+                circles: [
+                  for (final geofence in _geofences)
+                    CircleMarker(
+                      point: LatLng(geofence.latitude, geofence.longitude),
+                      radius: geofence.radiusMeters,
+                      useRadiusInMeter: true,
+                      color: MinimalColors.accentGreenBg.withValues(alpha: 0.28),
+                      borderColor: MinimalColors.accentGreenText,
+                      borderStrokeWidth: 2,
+                    ),
+                ],
+              ),
             MarkerLayer(
               markers: [
                 Marker(
@@ -472,6 +539,12 @@ class _FamilyBlindUserLocationScreenState
                         _buildMapPreview(theme, colorScheme, effectiveLocation),
                         if (effectiveLocation != null) ...[
                           const SizedBox(height: 16),
+                          if (effectiveLocation.batteryLevel != null)
+                            _InfoLine(
+                              label: '电量',
+                              value:
+                                  '${(effectiveLocation.batteryLevel! * 100).round()}%${effectiveLocation.isCharging == true ? '（充电中）' : ''}',
+                            ),
                           _InfoLine(
                             label: '纬度',
                             value: effectiveLocation.latitude.toStringAsFixed(
@@ -530,6 +603,14 @@ class _FamilyBlindUserLocationScreenState
                             onPressed: () => _showMapOptions(effectiveLocation),
                             icon: const Icon(Icons.map_rounded),
                             label: const Text('选择地图导航'),
+                          ),
+                        if (effectiveLocation != null)
+                          const SizedBox(height: 12),
+                        if (effectiveLocation != null)
+                          OutlinedButton.icon(
+                            onPressed: () => _createSafeZone(effectiveLocation),
+                            icon: const Icon(Icons.shield_outlined),
+                            label: const Text('以当前位置创建安全区'),
                           ),
                         if (effectiveLocation != null)
                           const SizedBox(height: 12),

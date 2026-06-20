@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -21,6 +22,7 @@ class BlindModeProvider extends ChangeNotifier {
   final BlindLinkApiService _blindApi;
   final SecureStorageService _storage;
   final LocationService _locationService;
+  final Battery _battery = Battery();
 
   BlindSessionStatus _status = BlindSessionStatus.unknown;
   BlindIdentity? _blindIdentity;
@@ -246,6 +248,8 @@ class BlindModeProvider extends ChangeNotifier {
         speedMps: _finiteDouble(position.speed),
         headingDegrees: _finiteDouble(position.heading),
         provider: 'geolocator',
+        batteryLevel: await _batteryLevel(),
+        isCharging: await _isCharging(),
         capturedAt: position.timestamp.toUtc(),
       );
 
@@ -388,6 +392,23 @@ class BlindModeProvider extends ChangeNotifier {
       return value;
     }
     return null;
+  }
+
+  Future<double?> _batteryLevel() async {
+    try {
+      return (await _battery.batteryLevel).clamp(0, 100) / 100;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool?> _isCharging() async {
+    try {
+      final state = await _battery.batteryState;
+      return state == BatteryState.charging || state == BatteryState.full;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override

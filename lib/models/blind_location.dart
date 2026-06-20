@@ -6,6 +6,8 @@ class BlindLocation {
   final double? speedMps;
   final double? headingDegrees;
   final String? provider;
+  final double? batteryLevel;
+  final bool? isCharging;
   final DateTime? capturedAt;
   final DateTime? updatedAt;
 
@@ -17,6 +19,8 @@ class BlindLocation {
     this.speedMps,
     this.headingDegrees,
     this.provider,
+    this.batteryLevel,
+    this.isCharging,
     this.capturedAt,
     this.updatedAt,
   });
@@ -30,6 +34,8 @@ class BlindLocation {
       speedMps: _parseDouble(json['speed_mps']),
       headingDegrees: _parseDouble(json['heading_degrees']),
       provider: _parseString(json['provider']),
+      batteryLevel: _parseDouble(json['battery_level']),
+      isCharging: json['is_charging'] as bool?,
       capturedAt: _parseDateTime(json['captured_at']),
       updatedAt: _parseDateTime(json['updated_at']),
     );
@@ -43,6 +49,8 @@ class BlindLocation {
     double? speedMps,
     double? headingDegrees,
     String? provider,
+    double? batteryLevel,
+    bool? isCharging,
     DateTime? capturedAt,
     DateTime? updatedAt,
   }) {
@@ -54,6 +62,8 @@ class BlindLocation {
       speedMps: speedMps ?? this.speedMps,
       headingDegrees: headingDegrees ?? this.headingDegrees,
       provider: provider ?? this.provider,
+      batteryLevel: batteryLevel ?? this.batteryLevel,
+      isCharging: isCharging ?? this.isCharging,
       capturedAt: capturedAt ?? this.capturedAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -68,6 +78,8 @@ class BlindLocation {
       if (speedMps != null) 'speed_mps': speedMps,
       if (headingDegrees != null) 'heading_degrees': headingDegrees,
       if (provider != null && provider!.isNotEmpty) 'provider': provider,
+      if (batteryLevel != null) 'battery_level': batteryLevel,
+      if (isCharging != null) 'is_charging': isCharging,
       if (capturedAt != null)
         'captured_at': capturedAt!.toUtc().toIso8601String(),
     };

@@ -56,10 +56,7 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
       return;
     }
 
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden ||
-        state == AppLifecycleState.detached) {
+    if (state == AppLifecycleState.detached) {
       blindMode.stopForegroundTracking();
     }
   }
@@ -76,7 +73,7 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
 
   @override
   void didPushNext() {
-    context.read<BlindModeProvider>().stopForegroundTracking();
+    unawaited(context.read<BlindModeProvider>().startForegroundTracking());
   }
 
   @override

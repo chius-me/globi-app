@@ -50,7 +50,10 @@ void main() {
     storage: storage,
     locationService: LocationService(),
   );
-  final familyBlindProvider = FamilyBlindProvider(blindApi: blindApi);
+  final familyBlindProvider = FamilyBlindProvider(
+    blindApi: blindApi,
+    storage: storage,
+  );
 
   apiDio.interceptors.add(
     AuthInterceptor(

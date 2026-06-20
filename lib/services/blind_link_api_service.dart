@@ -8,8 +8,10 @@ import '../models/blind_link_result.dart';
 import '../models/blind_location.dart';
 import '../models/blind_location_upload_result.dart';
 import '../models/family_blind_user.dart';
+import '../models/family_blind_user_geofence.dart';
 import '../models/family_blind_user_map.dart';
 import '../models/family_blind_user_location.dart';
+import '../models/family_blind_user_route_history.dart';
 
 class BlindLinkApiService {
   final Dio _publicDio;
@@ -114,6 +116,78 @@ class BlindLinkApiService {
     final response = await dio.get('/api/family/blind-users/$blindUserId/map');
 
     return FamilyBlindUserMap.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<FamilyBlindUserRouteHistory> getFamilyBlindUserRouteHistory({
+    required String blindUserId,
+    int hours = 24,
+  }) async {
+    final dio = _protectedDio ?? _publicDio;
+    final response = await dio.get(
+      '/api/family/blind-users/$blindUserId/route-history',
+      queryParameters: {'hours': hours},
+    );
+    return FamilyBlindUserRouteHistory.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<List<FamilyBlindUserGeofence>> listFamilyBlindUserGeofences({
+    required String blindUserId,
+  }) async {
+    final dio = _protectedDio ?? _publicDio;
+    final response = await dio.get('/api/family/blind-users/$blindUserId/geofences');
+    final data = response.data as Map<String, dynamic>;
+    final geofences = data['geofences'];
+    if (geofences is! List) return const [];
+    return geofences
+        .whereType<Map<String, dynamic>>()
+        .map(FamilyBlindUserGeofence.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<FamilyBlindUserGeofence> createFamilyBlindUserGeofence({
+    required String blindUserId,
+    required String label,
+    required double latitude,
+    required double longitude,
+    required double radiusMeters,
+  }) async {
+    final dio = _protectedDio ?? _publicDio;
+    final response = await dio.post(
+      '/api/family/blind-users/$blindUserId/geofences',
+      data: {
+        'label': label,
+        'latitude': latitude,
+        'longitude': longitude,
+        'radius_meters': radiusMeters,
+        'enabled': true,
+      },
+    );
+    return FamilyBlindUserGeofence.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<bool> deleteFamilyBlindUserGeofence({
+    required String blindUserId,
+    required String geofenceId,
+  }) async {
+    final dio = _protectedDio ?? _publicDio;
+    final response = await dio.delete(
+      '/api/family/blind-users/$blindUserId/geofences/$geofenceId',
+    );
+    final data = response.data;
+    if (data is Map<String, dynamic>) return data['deleted'] as bool? ?? false;
+    return false;
+  }
+
+  Uri familyLocationWebSocketUri({
+    required String blindUserId,
+    required String accessToken,
+  }) {
+    final base = Uri.parse(AppConstants.backendBaseUrl);
+    return base.replace(
+      scheme: base.scheme == 'https' ? 'wss' : 'ws',
+      path: '/ws/family/blind-users/$blindUserId/location',
+      queryParameters: {'token': accessToken},
+    );
   }
 
   Future<bool> deleteFamilyBlindUser({required String blindUserId}) async {
