@@ -21,6 +21,8 @@ class BlindHomeScreen extends StatefulWidget {
 class _BlindHomeScreenState extends State<BlindHomeScreen>
     with WidgetsBindingObserver, RouteAware {
   bool _routeObserverAttached = false;
+  Timer? _sosCountdownTimer;
+  int _sosCountdownSeconds = 0;
 
   @override
   void initState() {
@@ -78,6 +80,7 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
 
   @override
   void dispose() {
+    _sosCountdownTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     if (_routeObserverAttached) {
       appRouteObserver.unsubscribe(this);
@@ -148,6 +151,10 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
   }
 
   Future<void> _sendSos() async {
+    _sosCountdownTimer?.cancel();
+    if (mounted) {
+      setState(() => _sosCountdownSeconds = 0);
+    }
     final blindMode = context.read<BlindModeProvider>();
     final result = await blindMode.sendSos();
     if (!mounted || result == null) {
@@ -164,6 +171,34 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('请长按 SOS 按钮发送紧急求助')));
+  }
+
+  void _startSosCountdown() {
+    if (_sosCountdownSeconds > 0) return;
+    HapticFeedback.heavyImpact();
+    setState(() => _sosCountdownSeconds = 10);
+    _sosCountdownTimer?.cancel();
+    _sosCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_sosCountdownSeconds <= 1) {
+        timer.cancel();
+        unawaited(_sendSos());
+        return;
+      }
+      setState(() => _sosCountdownSeconds -= 1);
+    });
+  }
+
+  void _cancelSosCountdown() {
+    _sosCountdownTimer?.cancel();
+    HapticFeedback.selectionClick();
+    setState(() => _sosCountdownSeconds = 0);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('SOS 已取消')));
   }
 
   @override
@@ -235,6 +270,13 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
                     ),
                   _GuardianStatusCard(blindMode: blindMode),
                   const SizedBox(height: Spacing.md),
+                  if (_sosCountdownSeconds > 0) ...[
+                    _SosCountdownCard(
+                      seconds: _sosCountdownSeconds,
+                      onCancel: _cancelSosCountdown,
+                    ),
+                    const SizedBox(height: Spacing.md),
+                  ],
                   Expanded(
                     child: Row(
                       children: [
@@ -297,7 +339,7 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
                             onTap: blindMode.isSendingSos ? null : _showSosHint,
                             onLongPress: blindMode.isSendingSos
                                 ? null
-                                : _sendSos,
+                                : _startSosCountdown,
                           ),
                         ),
                       ],
@@ -451,6 +493,59 @@ class _BigButton extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SosCountdownCard extends StatelessWidget {
+  final int seconds;
+  final VoidCallback onCancel;
+
+  const _SosCountdownCard({required this.seconds, required this.onCancel});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      liveRegion: true,
+      label: 'SOS 将在 $seconds 秒后发送，点击取消可以停止发送',
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(Spacing.md),
+        decoration: BoxDecoration(
+          color: MinimalColors.accentRedBg,
+          borderRadius: BorderRadius.circular(RadiusTokens.card),
+          border: Border.all(
+            color: MinimalColors.accentRedText.withValues(alpha: 0.18),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.warning_rounded,
+              color: MinimalColors.accentRedText,
+            ),
+            const SizedBox(width: Spacing.sm),
+            Expanded(
+              child: Text(
+                '$seconds 秒后发送 SOS',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: MinimalColors.accentRedText,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            FilledButton(
+              onPressed: onCancel,
+              style: FilledButton.styleFrom(
+                backgroundColor: MinimalColors.accentRedText,
+                foregroundColor: MinimalColors.textInverse,
+              ),
+              child: const Text('取消'),
+            ),
+          ],
         ),
       ),
     );

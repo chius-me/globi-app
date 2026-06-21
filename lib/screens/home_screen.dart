@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../config/design_tokens.dart';
 import '../models/blind_link_code.dart';
@@ -32,12 +33,15 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<FamilyBlindProvider>().refreshHomeData();
+      final familyBlind = context.read<FamilyBlindProvider>();
+      familyBlind.refreshHomeData();
+      familyBlind.connectSosUpdates();
     });
   }
 
   @override
   void dispose() {
+    context.read<FamilyBlindProvider>().disconnectSosUpdates();
     _blindUserNameController.dispose();
     super.dispose();
   }
@@ -87,7 +91,24 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           _SettingsTab(
             isLocalLogin: auth.isLocalLogin,
+            blindUsers: familyBlind.blindUsers,
             onRefresh: () => _refreshHome(auth),
+            onSosHistory: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const _SosHistoryScreen(),
+                ),
+              );
+            },
+            onDeviceManagement: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => _DeviceManagementScreen(
+                    blindUsers: familyBlind.blindUsers,
+                  ),
+                ),
+              );
+            },
             onChangePassword: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -505,6 +526,17 @@ class _SosEventTile extends StatelessWidget {
           const SizedBox(height: Spacing.xs),
           _InfoRow(label: '邮件', value: emailText),
           const SizedBox(height: Spacing.md),
+          if (event.latitude != null && event.longitude != null) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _openSosMap(event),
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('打开地图导航'),
+              ),
+            ),
+            const SizedBox(height: Spacing.sm),
+          ],
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -531,15 +563,36 @@ class _SosEventTile extends StatelessWidget {
   }
 }
 
+Future<void> _openSosMap(FamilySosEvent event) async {
+  final latitude = event.latitude;
+  final longitude = event.longitude;
+  if (latitude == null || longitude == null) return;
+  final label = Uri.encodeComponent(event.blindUserName);
+  final geoUri = Uri.parse(
+    'geo:$latitude,$longitude?q=$latitude,$longitude($label)',
+  );
+  if (await launchUrl(geoUri, mode: LaunchMode.externalApplication)) {
+    return;
+  }
+  final webUri = Uri.parse('https://maps.google.com/?q=$latitude,$longitude');
+  await launchUrl(webUri, mode: LaunchMode.externalApplication);
+}
+
 class _SettingsTab extends StatelessWidget {
   final bool isLocalLogin;
+  final List<FamilyBlindUser> blindUsers;
   final VoidCallback onRefresh;
+  final VoidCallback onSosHistory;
+  final VoidCallback onDeviceManagement;
   final VoidCallback onChangePassword;
   final VoidCallback onLogout;
 
   const _SettingsTab({
     required this.isLocalLogin,
+    required this.blindUsers,
     required this.onRefresh,
+    required this.onSosHistory,
+    required this.onDeviceManagement,
     required this.onChangePassword,
     required this.onLogout,
   });
@@ -574,6 +627,18 @@ class _SettingsTab extends StatelessWidget {
                   icon: Icons.refresh_rounded,
                   title: '刷新数据',
                   onTap: onRefresh,
+                ),
+                const Divider(),
+                _SettingsTile(
+                  icon: Icons.history_rounded,
+                  title: 'SOS 历史记录',
+                  onTap: onSosHistory,
+                ),
+                const Divider(),
+                _SettingsTile(
+                  icon: Icons.devices_rounded,
+                  title: '设备管理（${blindUsers.length}）',
+                  onTap: onDeviceManagement,
                 ),
                 if (isLocalLogin) ...[
                   const Divider(),
@@ -646,6 +711,122 @@ class _SettingsTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SosHistoryScreen extends StatelessWidget {
+  const _SosHistoryScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('SOS 历史记录')),
+      body: FutureBuilder<List<FamilySosEvent>>(
+        future: context.read<FamilyBlindProvider>().getSosHistory(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final events = snapshot.data ?? const <FamilySosEvent>[];
+          if (events.isEmpty) {
+            return const Center(child: Text('暂无 SOS 记录'));
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.all(Spacing.lg),
+            itemCount: events.length,
+            separatorBuilder: (_, _) => const SizedBox(height: Spacing.md),
+            itemBuilder: (context, index) {
+              final event = events[index];
+              final status = event.status == 'acknowledged' ? '已确认' : '待确认';
+              return GlobiCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GlobiCardHeader(
+                      leading: Icon(
+                        event.status == 'acknowledged'
+                            ? Icons.check_circle_outline_rounded
+                            : Icons.sos_rounded,
+                        color: event.status == 'acknowledged'
+                            ? MinimalColors.accentGreenText
+                            : MinimalColors.accentRedText,
+                      ),
+                      title: '${event.blindUserName} · $status',
+                      subtitle: _formatDateTime(event.createdAt),
+                    ),
+                    const SizedBox(height: Spacing.sm),
+                    _InfoRow(
+                      label: '邮件',
+                      value: event.emailSentAt != null
+                          ? '已发送'
+                          : (event.emailError == null ? '待发送' : '发送失败'),
+                    ),
+                    if (event.latitude != null && event.longitude != null) ...[
+                      const SizedBox(height: Spacing.sm),
+                      OutlinedButton.icon(
+                        onPressed: () => _openSosMap(event),
+                        icon: const Icon(Icons.map_outlined),
+                        label: const Text('打开地图'),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DeviceManagementScreen extends StatelessWidget {
+  final List<FamilyBlindUser> blindUsers;
+
+  const _DeviceManagementScreen({required this.blindUsers});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('设备管理')),
+      body: blindUsers.isEmpty
+          ? const Center(child: Text('暂无绑定设备'))
+          : ListView.separated(
+              padding: const EdgeInsets.all(Spacing.lg),
+              itemCount: blindUsers.length,
+              separatorBuilder: (_, _) => const SizedBox(height: Spacing.md),
+              itemBuilder: (context, index) {
+                final user = blindUsers[index];
+                return GlobiCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      GlobiCardHeader(
+                        leading: const Icon(Icons.devices_rounded),
+                        title: user.blindUserName,
+                        subtitle: user.deviceLabel ?? '未记录设备名',
+                      ),
+                      const SizedBox(height: Spacing.sm),
+                      _InfoRow(
+                        label: '绑定时间',
+                        value: _formatDateTime(user.linkedAt),
+                      ),
+                      const SizedBox(height: Spacing.xs),
+                      _InfoRow(
+                        label: '最近在线',
+                        value: _formatDateTime(user.lastSeenAt),
+                      ),
+                      const SizedBox(height: Spacing.xs),
+                      _InfoRow(
+                        label: '最近定位',
+                        value: _formatDateTime(user.lastLocationAt),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
     );
   }
 }

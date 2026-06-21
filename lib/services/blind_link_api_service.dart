@@ -250,11 +250,12 @@ class BlindLinkApiService {
 
   Future<List<FamilySosEvent>> listFamilySosEvents({
     String status = 'active',
+    int limit = 100,
   }) async {
     final dio = _protectedDio ?? _publicDio;
     final response = await dio.get(
       '/api/family/sos-events',
-      queryParameters: {'status': status},
+      queryParameters: {'status': status, 'limit': limit},
     );
     final data = response.data as Map<String, dynamic>;
     final events = data['sos_events'];
@@ -273,5 +274,14 @@ class BlindLinkApiService {
       '/api/family/sos-events/$sosEventId/acknowledge',
     );
     return FamilySosEvent.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Uri familySosWebSocketUri({required String accessToken}) {
+    final base = Uri.parse(AppConstants.backendBaseUrl);
+    return base.replace(
+      scheme: base.scheme == 'https' ? 'wss' : 'ws',
+      path: '/ws/family/sos-events',
+      queryParameters: {'token': accessToken},
+    );
   }
 }

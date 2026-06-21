@@ -13,14 +13,18 @@ import '../models/family_blind_user_location.dart';
 import '../models/family_blind_user_route_history.dart';
 import '../models/family_sos_event.dart';
 import '../services/blind_link_api_service.dart';
+import '../services/notification_service.dart';
 import '../services/secure_storage_service.dart';
 import '../utils/api_error.dart';
 
 class FamilyBlindProvider extends ChangeNotifier {
   final BlindLinkApiService _blindApi;
   final SecureStorageService _storage;
+  final NotificationService _notificationService;
   WebSocketChannel? _locationChannel;
   StreamSubscription<dynamic>? _locationSubscription;
+  WebSocketChannel? _sosChannel;
+  StreamSubscription<dynamic>? _sosSubscription;
 
   BlindLinkCode? _latestLinkCode;
   List<FamilyBlindUser> _blindUsers = const [];
@@ -35,7 +39,9 @@ class FamilyBlindProvider extends ChangeNotifier {
   FamilyBlindProvider({
     required BlindLinkApiService blindApi,
     required SecureStorageService storage,
+    required NotificationService notificationService,
   }) : _blindApi = blindApi,
+       _notificationService = notificationService,
        _storage = storage;
 
   BlindLinkCode? get latestLinkCode => _latestLinkCode;
@@ -202,6 +208,10 @@ class FamilyBlindProvider extends ChangeNotifier {
     }
   }
 
+  Future<List<FamilySosEvent>> getSosHistory() {
+    return _blindApi.listFamilySosEvents(status: 'all', limit: 100);
+  }
+
   Future<FamilyBlindUserRouteHistory> getBlindUserRouteHistory(
     String blindUserId, {
     int hours = 24,
@@ -268,6 +278,28 @@ class FamilyBlindProvider extends ChangeNotifier {
     _locationChannel = null;
   }
 
+  Future<void> connectSosUpdates() async {
+    await disconnectSosUpdates();
+    final accessToken = await _storage.getAccessToken();
+    if (accessToken == null || accessToken.isEmpty) return;
+    final channel = WebSocketChannel.connect(
+      _blindApi.familySosWebSocketUri(accessToken: accessToken),
+    );
+    _sosChannel = channel;
+    _sosSubscription = channel.stream.listen(
+      _handleSosEvent,
+      onError: (_) {},
+      onDone: () {},
+    );
+  }
+
+  Future<void> disconnectSosUpdates() async {
+    await _sosSubscription?.cancel();
+    _sosSubscription = null;
+    await _sosChannel?.sink.close();
+    _sosChannel = null;
+  }
+
   Future<bool> deleteBlindUser(String blindUserId) async {
     if (_isDeletingBlindUser) {
       return false;
@@ -307,6 +339,7 @@ class FamilyBlindProvider extends ChangeNotifier {
 
   void clearState() {
     unawaited(disconnectLocationUpdates());
+    unawaited(disconnectSosUpdates());
     _latestLinkCode = null;
     _blindUsers = const [];
     _activeSosEvents = const [];
@@ -338,9 +371,41 @@ class FamilyBlindProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _handleSosEvent(dynamic message) {
+    if (message is! String) return;
+    final decoded = jsonDecode(message);
+    if (decoded is! Map<String, dynamic>) return;
+    final eventJson = decoded['sos_event'];
+    if (eventJson is! Map<String, dynamic>) return;
+    final event = FamilySosEvent.fromJson(eventJson);
+    final type = decoded['type'];
+    if (type == 'sos_acknowledged') {
+      _activeSosEvents = _activeSosEvents
+          .where((item) => item.sosEventId != event.sosEventId)
+          .toList(growable: false);
+      notifyListeners();
+      return;
+    }
+    if (event.status != 'active') return;
+    final alreadyPresent = _activeSosEvents.any(
+      (item) => item.sosEventId == event.sosEventId,
+    );
+    if (!alreadyPresent) {
+      _activeSosEvents = [event, ..._activeSosEvents];
+      unawaited(
+        _notificationService.showSosAlert(
+          blindUserName: event.blindUserName,
+          body: '请立即打开领航助手查看并确认。',
+        ),
+      );
+      notifyListeners();
+    }
+  }
+
   @override
   void dispose() {
     unawaited(disconnectLocationUpdates());
+    unawaited(disconnectSosUpdates());
     super.dispose();
   }
 }

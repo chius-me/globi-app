@@ -14,6 +14,7 @@ import 'providers/family_blind_provider.dart';
 import 'services/auth_api_service.dart';
 import 'services/blind_link_api_service.dart';
 import 'services/location_service.dart';
+import 'services/notification_service.dart';
 import 'services/secure_storage_service.dart';
 import 'interceptors/auth_interceptor.dart';
 import 'screens/blind_link_screen.dart';
@@ -42,6 +43,7 @@ void main() {
 
   final authApi = AuthApiService(protectedDio: apiDio);
   final blindApi = BlindLinkApiService(protectedDio: apiDio);
+  final notificationService = NotificationService();
 
   final authProvider = AuthProvider(authApi: authApi, storage: storage);
   final appModeProvider = AppModeProvider(storage: storage);
@@ -53,6 +55,7 @@ void main() {
   final familyBlindProvider = FamilyBlindProvider(
     blindApi: blindApi,
     storage: storage,
+    notificationService: notificationService,
   );
 
   apiDio.interceptors.add(

@@ -48,6 +48,7 @@ dependencies:
   battery_plus: ^7.0.0
   device_info_plus: ^12.2.0
   web_socket_channel: ^3.0.3
+  flutter_local_notifications: ^19.5.0
   google_fonts: ^8.0.2
   flutter_svg: ^2.0.10
   pinput: ^6.0.2
