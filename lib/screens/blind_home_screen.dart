@@ -135,6 +135,18 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
     ).showSnackBar(const SnackBar(content: Text('当前无法打开拨号界面')));
   }
 
+  Future<void> _uploadLocation() async {
+    final blindMode = context.read<BlindModeProvider>();
+    await blindMode.uploadCurrentLocation(silentErrors: false);
+    if (!mounted || blindMode.errorMessage != null) {
+      return;
+    }
+    HapticFeedback.heavyImpact();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('当前位置已上传给家属')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -161,35 +173,78 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
                         padding: const EdgeInsets.all(Spacing.lg),
                         decoration: BoxDecoration(
                           color: MinimalColors.accentRedBg,
-                          borderRadius: BorderRadius.circular(RadiusTokens.soft),
+                          borderRadius: BorderRadius.circular(
+                            RadiusTokens.soft,
+                          ),
                           border: Border.all(
-                            color: MinimalColors.accentRedText.withValues(alpha: 0.15),
+                            color: MinimalColors.accentRedText.withValues(
+                              alpha: 0.15,
+                            ),
                           ),
                         ),
-                        child: Text(
-                          blindMode.errorMessage!,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: MinimalColors.accentRedText,
-                          ),
-                          textAlign: TextAlign.center,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              blindMode.errorMessage!,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: MinimalColors.accentRedText,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: Spacing.sm),
+                            Wrap(
+                              alignment: WrapAlignment.center,
+                              spacing: Spacing.sm,
+                              runSpacing: Spacing.sm,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: blindMode.openLocationSettings,
+                                  icon: const Icon(Icons.location_on_outlined),
+                                  label: const Text('打开定位设置'),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: blindMode.openAppSettings,
+                                  icon: const Icon(Icons.settings_outlined),
+                                  label: const Text('打开权限设置'),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ),
+                  _GuardianStatusCard(blindMode: blindMode),
+                  const SizedBox(height: Spacing.md),
                   Expanded(
                     child: Row(
                       children: [
-                        Expanded(child: _BigButton(
-                          icon: Icons.record_voice_over,
-                          label: '语音助手',
-                          onTap: () => Navigator.of(context).push(BlindAssistantScreen.route()),
-                        )),
+                        Expanded(
+                          child: _BigButton(
+                            icon: Icons.record_voice_over,
+                            label: '语音助手',
+                            semanticsHint: '打开语音助手，可以通过说话提问',
+                            onTap: () => Navigator.of(
+                              context,
+                            ).push(BlindAssistantScreen.route()),
+                          ),
+                        ),
                         const SizedBox(width: Spacing.md),
-                        Expanded(child: _BigButton(
-                          icon: blindMode.isUploadingLocation ? Icons.sync : Icons.my_location_rounded,
-                          label: blindMode.isUploadingLocation ? '上传中' : '上传定位',
-                          isLoading: blindMode.isUploadingLocation,
-                          onTap: blindMode.isUploadingLocation ? null : () => blindMode.uploadCurrentLocation(silentErrors: false),
-                        )),
+                        Expanded(
+                          child: _BigButton(
+                            icon: blindMode.isUploadingLocation
+                                ? Icons.sync
+                                : Icons.my_location_rounded,
+                            label: blindMode.isUploadingLocation
+                                ? '上传中'
+                                : '上传定位',
+                            semanticsHint: '向家属上传当前定位',
+                            isLoading: blindMode.isUploadingLocation,
+                            onTap: blindMode.isUploadingLocation
+                                ? null
+                                : _uploadLocation,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -197,43 +252,63 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
                   Expanded(
                     child: Row(
                       children: [
-                        Expanded(child: _BigButton(
-                          icon: blindMode.isCallingFamily ? Icons.sync : Icons.phone_callback_rounded,
-                          label: blindMode.isCallingFamily ? '获取中' : '呼叫家属',
-                          isLoading: blindMode.isCallingFamily,
-                          onTap: blindMode.isCallingFamily ? null : _callFamily,
-                        )),
+                        Expanded(
+                          child: _BigButton(
+                            icon: blindMode.isCallingFamily
+                                ? Icons.sync
+                                : Icons.phone_callback_rounded,
+                            label: blindMode.isCallingFamily ? '获取中' : '呼叫家属',
+                            semanticsHint: '打开拨号界面联系绑定家属',
+                            isLoading: blindMode.isCallingFamily,
+                            onTap: blindMode.isCallingFamily
+                                ? null
+                                : _callFamily,
+                          ),
+                        ),
                         const SizedBox(width: Spacing.md),
-                        Expanded(child: _BigButton(
-                          icon: Icons.sos_rounded,
-                          label: '呼叫SOS',
-                          isDestructive: true,
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('功能开发中')),
-                            );
-                          },
-                        )),
+                        Expanded(
+                          child: _BigButton(
+                            icon: Icons.sos_rounded,
+                            label: '呼叫SOS',
+                            semanticsHint: '紧急求助功能还在设计中',
+                            isDestructive: true,
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('功能开发中')),
+                              );
+                            },
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(height: Spacing.md),
-                  Expanded(
+                  SizedBox(
+                    height: 72,
                     child: Row(
                       children: [
-                        Expanded(child: _BigButton(
-                          icon: Icons.link_off_rounded,
-                          label: '重新绑定',
-                          isSecondary: true,
-                          onTap: _confirmClearBlindAuthorization,
-                        )),
+                        Expanded(
+                          child: _BigButton(
+                            icon: Icons.link_off_rounded,
+                            label: '重新绑定',
+                            semanticsHint: '清除当前授权，需要重新输入家属生成的授权码',
+                            isSecondary: true,
+                            isCompact: true,
+                            onTap: _confirmClearBlindAuthorization,
+                          ),
+                        ),
                         const SizedBox(width: Spacing.md),
-                        Expanded(child: _BigButton(
-                          icon: Icons.swap_horiz,
-                          label: '切换身份',
-                          isSecondary: true,
-                          onTap: () => context.read<AppModeProvider>().resetMode(),
-                        )),
+                        Expanded(
+                          child: _BigButton(
+                            icon: Icons.swap_horiz,
+                            label: '切换身份',
+                            semanticsHint: '切换到身份选择页面',
+                            isSecondary: true,
+                            isCompact: true,
+                            onTap: () =>
+                                context.read<AppModeProvider>().resetMode(),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -250,17 +325,21 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
 class _BigButton extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String semanticsHint;
   final bool isLoading;
   final bool isDestructive;
   final bool isSecondary;
+  final bool isCompact;
   final VoidCallback? onTap;
 
   const _BigButton({
     required this.icon,
     required this.label,
+    required this.semanticsHint,
     this.isLoading = false,
     this.isDestructive = false,
     this.isSecondary = false,
+    this.isCompact = false,
     this.onTap,
   });
 
@@ -291,17 +370,27 @@ class _BigButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: label,
-      hint: '双击以激活',
+      hint: '$semanticsHint，双击以激活',
       enabled: effectiveOnTap != null,
       child: InkWell(
         onTap: effectiveOnTap,
-        borderRadius: BorderRadius.circular(RadiusTokens.card),
+        borderRadius: BorderRadius.circular(
+          isCompact ? RadiusTokens.soft : RadiusTokens.card,
+        ),
         child: Container(
+          padding: isCompact
+              ? const EdgeInsets.symmetric(horizontal: Spacing.sm)
+              : EdgeInsets.zero,
           decoration: BoxDecoration(
             color: bgColor,
-            borderRadius: BorderRadius.circular(RadiusTokens.card),
+            borderRadius: BorderRadius.circular(
+              isCompact ? RadiusTokens.soft : RadiusTokens.card,
+            ),
             border: isSecondary
-                ? Border.all(color: theme.colorScheme.outline, width: BorderTokens.thin)
+                ? Border.all(
+                    color: theme.colorScheme.outline,
+                    width: BorderTokens.thin,
+                  )
                 : null,
           ),
           child: Column(
@@ -309,23 +398,24 @@ class _BigButton extends StatelessWidget {
             children: [
               if (isLoading)
                 SizedBox(
-                  width: 32,
-                  height: 32,
+                  width: isCompact ? 22 : 32,
+                  height: isCompact ? 22 : 32,
                   child: CircularProgressIndicator(
-                    strokeWidth: 3,
+                    strokeWidth: isCompact ? 2.5 : 3,
                     color: fgColor,
                   ),
                 )
               else
-                Icon(icon, size: 40, color: fgColor),
-              const SizedBox(height: Spacing.md),
+                Icon(icon, size: isCompact ? 22 : 40, color: fgColor),
+              SizedBox(height: isCompact ? Spacing.xs : Spacing.md),
               Text(
                 label,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: fgColor,
-                ),
+                style:
+                    (isCompact
+                            ? theme.textTheme.labelLarge
+                            : theme.textTheme.titleMedium)
+                        ?.copyWith(fontWeight: FontWeight.w600, color: fgColor),
               ),
             ],
           ),
@@ -333,4 +423,150 @@ class _BigButton extends StatelessWidget {
       ),
     );
   }
+}
+
+class _GuardianStatusCard extends StatelessWidget {
+  final BlindModeProvider blindMode;
+
+  const _GuardianStatusCard({required this.blindMode});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final identity = blindMode.blindIdentity;
+    final location = blindMode.lastUploadedLocation;
+    final uploadedAt =
+        location?.updatedAt ?? blindMode.lastUploadResult?.updatedAt;
+    final batteryText = location?.batteryLevel == null
+        ? '电量未知'
+        : '电量 ${(location!.batteryLevel! * 100).round()}%';
+    final chargingText = location?.isCharging == true ? '，充电中' : '';
+    final deviceText = identity?.deviceLabel?.isNotEmpty == true
+        ? identity!.deviceLabel!
+        : '本机设备';
+    final accuracyText = location?.accuracyMeters == null
+        ? '精度未知'
+        : '精度约 ${location!.accuracyMeters!.round()} 米';
+    final coordinateText = location == null
+        ? '坐标待上传'
+        : '${location.latitude.toStringAsFixed(5)}, ${location.longitude.toStringAsFixed(5)}';
+
+    return Semantics(
+      label:
+          '守护状态，家属 ${identity?.familyDisplayName ?? '未绑定'}，定位追踪已开启，最后上传 ${_relativeTime(uploadedAt)}，$batteryText$chargingText',
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(Spacing.md),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(RadiusTokens.card),
+          border: Border.all(
+            color: theme.colorScheme.primary.withValues(alpha: 0.12),
+            width: BorderTokens.thin,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.shield_outlined, color: theme.colorScheme.primary),
+                const SizedBox(width: Spacing.sm),
+                Expanded(
+                  child: Text(
+                    '守护状态：${identity?.familyDisplayName ?? '未绑定家属'}',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Spacing.sm),
+            Text(
+              '定位追踪已开启 · ${_relativeTime(uploadedAt)}',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: MinimalColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: Spacing.xs),
+            Text(
+              '$batteryText$chargingText · $accuracyText',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: MinimalColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: Spacing.sm),
+            Wrap(
+              spacing: Spacing.xs,
+              runSpacing: Spacing.xs,
+              children: [
+                _StatusPill(icon: Icons.devices_rounded, label: deviceText),
+                _StatusPill(
+                  icon: Icons.my_location_rounded,
+                  label: coordinateText,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _StatusPill({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: Spacing.sm,
+        vertical: Spacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(RadiusTokens.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: MinimalColors.textSecondary),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: MinimalColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _relativeTime(DateTime? value) {
+  if (value == null) {
+    return '尚未上传';
+  }
+  final diff = DateTime.now().toUtc().difference(value.toUtc());
+  if (diff.inMinutes < 1) {
+    return '刚刚上传';
+  }
+  if (diff.inHours < 1) {
+    return '${diff.inMinutes}分钟前上传';
+  }
+  if (diff.inDays < 1) {
+    return '${diff.inHours}小时前上传';
+  }
+  return '${diff.inDays}天前上传';
 }

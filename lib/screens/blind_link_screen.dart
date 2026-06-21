@@ -1,5 +1,9 @@
 import 'dart:math' as math;
+
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:pinput/pinput.dart';
 
@@ -35,7 +39,18 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
   }
 
   void _onCodeChanged() {
-    if (_authorizationCodeController.text.isEmpty && (_isError || _isSuccess)) {
+    final normalized = _normalizeAuthorizationCode(
+      _authorizationCodeController.text,
+    );
+    if (normalized != _authorizationCodeController.text) {
+      _authorizationCodeController.value = TextEditingValue(
+        text: normalized,
+        selection: TextSelection.collapsed(offset: normalized.length),
+      );
+      return;
+    }
+
+    if (normalized.isEmpty && (_isError || _isSuccess)) {
       setState(() {
         _isError = false;
         _isSuccess = false;
@@ -61,9 +76,10 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
       _isSuccess = false;
     });
 
+    final deviceLabel = await _defaultDeviceLabel();
     await blindMode.redeemBlindLinkCode(
       authorizationCode: _authorizationCodeController.text,
-      deviceLabel: '',
+      deviceLabel: deviceLabel,
     );
 
     if (mounted) {
@@ -85,6 +101,48 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
   Future<void> _resetToHome() async {
     FocusScope.of(context).unfocus();
     await context.read<AppModeProvider>().resetMode();
+  }
+
+  Future<void> _pasteAuthorizationCode() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final normalized = _normalizeAuthorizationCode(data?.text ?? '');
+    if (normalized.isEmpty) {
+      return;
+    }
+    _authorizationCodeController.text = normalized;
+    HapticFeedback.selectionClick();
+  }
+
+  void _clearAuthorizationCode() {
+    _authorizationCodeController.clear();
+    HapticFeedback.selectionClick();
+  }
+
+  String _normalizeAuthorizationCode(String value) {
+    final normalized = value
+        .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
+        .toUpperCase();
+    if (normalized.length <= 8) {
+      return normalized;
+    }
+    return normalized.substring(0, 8);
+  }
+
+  Future<String?> _defaultDeviceLabel() async {
+    try {
+      final plugin = DeviceInfoPlugin();
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final info = await plugin.androidInfo;
+        return '${info.manufacturer} ${info.model}'.trim();
+      }
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final info = await plugin.iosInfo;
+        return '${info.name} ${info.model}'.trim();
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
   }
 
   @override
@@ -138,12 +196,13 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
                                   defaultPinTheme: PinTheme(
                                     width: 36,
                                     height: 52,
-                                    textStyle: theme.textTheme.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                    textStyle: theme.textTheme.titleLarge
+                                        ?.copyWith(fontWeight: FontWeight.w600),
                                     decoration: BoxDecoration(
                                       color: theme.colorScheme.surface,
-                                      borderRadius: BorderRadius.circular(RadiusTokens.soft),
+                                      borderRadius: BorderRadius.circular(
+                                        RadiusTokens.soft,
+                                      ),
                                       border: Border.all(
                                         color: theme.colorScheme.outline,
                                         width: BorderTokens.thin,
@@ -153,12 +212,13 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
                                   focusedPinTheme: PinTheme(
                                     width: 38,
                                     height: 54,
-                                    textStyle: theme.textTheme.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                    textStyle: theme.textTheme.titleLarge
+                                        ?.copyWith(fontWeight: FontWeight.w600),
                                     decoration: BoxDecoration(
                                       color: theme.colorScheme.surface,
-                                      borderRadius: BorderRadius.circular(RadiusTokens.soft),
+                                      borderRadius: BorderRadius.circular(
+                                        RadiusTokens.soft,
+                                      ),
                                       border: Border.all(
                                         color: theme.colorScheme.primary,
                                         width: 2,
@@ -186,9 +246,40 @@ class _BlindLinkScreenState extends State<BlindLinkScreen>
                                   textCapitalization:
                                       TextCapitalization.characters,
                                   keyboardType: TextInputType.visiblePassword,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(
+                                      RegExp('[A-Za-z0-9- ]'),
+                                    ),
+                                  ],
                                   onCompleted: (_) => _submit(),
                                 ),
                               ),
+                            ),
+                            const SizedBox(height: Spacing.md),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: blindMode.isLinking
+                                        ? null
+                                        : _pasteAuthorizationCode,
+                                    icon: const Icon(
+                                      Icons.content_paste_rounded,
+                                    ),
+                                    label: const Text('粘贴授权码'),
+                                  ),
+                                ),
+                                const SizedBox(width: Spacing.sm),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: blindMode.isLinking
+                                        ? null
+                                        : _clearAuthorizationCode,
+                                    icon: const Icon(Icons.backspace_outlined),
+                                    label: const Text('清空'),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: Spacing.xxl),
                             SizedBox(

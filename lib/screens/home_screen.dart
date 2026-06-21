@@ -55,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showCopySnackbar(String code) {
-    Clipboard.setData(ClipboardData(text: code));
+    Clipboard.setData(ClipboardData(text: code.replaceAll('-', '')));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('授权码已复制')),
@@ -97,9 +97,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return Scaffold(
           backgroundColor: MinimalColors.lightBg,
-          body: IndexedStack(
-            index: _currentTabIndex,
-            children: pages,
+          body: SafeArea(
+            child: IndexedStack(
+              index: _currentTabIndex,
+              children: pages,
+            ),
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _currentTabIndex,

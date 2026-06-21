@@ -118,7 +118,9 @@ class BlindModeProvider extends ChangeNotifier {
     required String authorizationCode,
     String? deviceLabel,
   }) async {
-    final trimmedCode = authorizationCode.trim();
+    final trimmedCode = authorizationCode
+        .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
+        .toUpperCase();
     if (trimmedCode.isEmpty || _isLinking) {
       return false;
     }

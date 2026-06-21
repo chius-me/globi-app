@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 class LocationServiceException implements Exception {
@@ -23,11 +24,32 @@ class LocationService {
   }) async* {
     await _checkPermissions();
     yield* Geolocator.getPositionStream(
-      locationSettings: LocationSettings(
+      locationSettings: _streamSettings(
         accuracy: accuracy,
         distanceFilter: distanceFilter,
       ),
     );
+  }
+
+  LocationSettings _streamSettings({
+    required LocationAccuracy accuracy,
+    required int distanceFilter,
+  }) {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: accuracy,
+        distanceFilter: distanceFilter,
+        intervalDuration: const Duration(seconds: 30),
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: '领航助手正在守护定位',
+          notificationText: '正在为家属持续更新当前位置',
+          enableWakeLock: true,
+          setOngoing: true,
+        ),
+      );
+    }
+
+    return LocationSettings(accuracy: accuracy, distanceFilter: distanceFilter);
   }
 
   Future<void> _checkPermissions() async {
