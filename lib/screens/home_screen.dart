@@ -67,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Consumer2<AuthProvider, FamilyBlindProvider>(
       builder: (context, auth, familyBlind, _) {
         final pages = <Widget>[
-          _AuthorizationTab(
+          _MainTab(
             controller: _blindUserNameController,
             latestLinkCode: familyBlind.latestLinkCode,
             isSubmitting: familyBlind.isCreatingLinkCode,
@@ -77,8 +77,6 @@ class _HomeScreenState extends State<HomeScreen> {
             onCopy: () => _showCopySnackbar(
               familyBlind.latestLinkCode!.authorizationCode,
             ),
-          ),
-          _BoundUsersTab(
             blindUsers: familyBlind.blindUsers,
             isLoading: familyBlind.isLoadingBlindUsers,
             onRefresh: familyBlind.refreshBlindUsers,
@@ -99,9 +97,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return Scaffold(
           backgroundColor: MinimalColors.lightBg,
-          appBar: AppBar(
-            title: const Text('家属主页'),
-          ),
           body: IndexedStack(
             index: _currentTabIndex,
             children: pages,
@@ -112,18 +107,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 setState(() => _currentTabIndex = index),
             destinations: const [
               NavigationDestination(
-                icon: Icon(Icons.qr_code_rounded),
-                label: '授权码',
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home_rounded),
+                label: '主页',
               ),
               NavigationDestination(
-                icon: Icon(Icons.groups_outlined),
-                selectedIcon: Icon(Icons.groups_rounded),
-                label: '已绑定',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.settings_outlined),
-                selectedIcon: Icon(Icons.settings_rounded),
-                label: '设置',
+                icon: Icon(Icons.person_outline_rounded),
+                selectedIcon: Icon(Icons.person_rounded),
+                label: '我的',
               ),
             ],
           ),
@@ -159,7 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _AuthorizationTab extends StatelessWidget {
+class _MainTab extends StatelessWidget {
   final TextEditingController controller;
   final BlindLinkCode? latestLinkCode;
   final bool isSubmitting;
@@ -167,8 +158,11 @@ class _AuthorizationTab extends StatelessWidget {
   final VoidCallback onGenerate;
   final VoidCallback onDismissError;
   final VoidCallback onCopy;
+  final List<FamilyBlindUser> blindUsers;
+  final bool isLoading;
+  final Future<void> Function() onRefresh;
 
-  const _AuthorizationTab({
+  const _MainTab({
     required this.controller,
     required this.latestLinkCode,
     required this.isSubmitting,
@@ -176,6 +170,9 @@ class _AuthorizationTab extends StatelessWidget {
     required this.onGenerate,
     required this.onDismissError,
     required this.onCopy,
+    required this.blindUsers,
+    required this.isLoading,
+    required this.onRefresh,
   });
 
   @override
@@ -184,11 +181,26 @@ class _AuthorizationTab extends StatelessWidget {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
-        Spacing.lg, Spacing.lg, Spacing.lg, Spacing.xxl,
+        Spacing.lg, Spacing.xl, Spacing.lg, Spacing.xxl,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Text(
+            '家人守护',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.02,
+            ),
+          ),
+          const SizedBox(height: Spacing.xs),
+          Text(
+            '生成授权码，查看已绑定用户的位置状态。',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: MinimalColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: Spacing.lg),
           if (errorMessage != null)
             Padding(
               padding: const EdgeInsets.only(bottom: Spacing.md),
@@ -286,18 +298,24 @@ class _AuthorizationTab extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: Spacing.lg),
+          _BoundUsersSection(
+            blindUsers: blindUsers,
+            isLoading: isLoading,
+            onRefresh: onRefresh,
+          ),
         ],
       ),
     );
   }
 }
 
-class _BoundUsersTab extends StatelessWidget {
+class _BoundUsersSection extends StatelessWidget {
   final List<FamilyBlindUser> blindUsers;
   final bool isLoading;
   final Future<void> Function() onRefresh;
 
-  const _BoundUsersTab({
+  const _BoundUsersSection({
     required this.blindUsers,
     required this.isLoading,
     required this.onRefresh,
@@ -307,64 +325,53 @@ class _BoundUsersTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        Spacing.lg, Spacing.lg, Spacing.lg, Spacing.xxl,
-      ),
+    return GlobiCard(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GlobiCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GlobiCardHeader(
-                  leading: Icon(
-                    Icons.groups_rounded,
-                    color: theme.colorScheme.primary,
-                  ),
-                  title: '已绑定盲人用户',
-                  trailing: IconButton(
-                    onPressed: isLoading ? null : onRefresh,
-                    icon: isLoading
-                        ? SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: theme.colorScheme.primary,
-                            ),
-                          )
-                        : const Icon(Icons.refresh_rounded, size: 20),
-                  ),
-                ),
-                const SizedBox(height: Spacing.sm),
-                if (blindUsers.isEmpty && !isLoading)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: Spacing.lg),
-                    child: Center(
-                      child: Text(
-                        '暂无已绑定用户。\n完成首次绑定后，这里会显示列表。',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: MinimalColors.textSecondary,
-                        ),
+          GlobiCardHeader(
+            leading: Icon(
+              Icons.groups_rounded,
+              color: theme.colorScheme.primary,
+            ),
+            title: '已绑定盲人用户',
+            trailing: IconButton(
+              onPressed: isLoading ? null : onRefresh,
+              icon: isLoading
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: theme.colorScheme.primary,
                       ),
-                    ),
-                  )
-                else
-                  Column(
-                    children: [
-                      for (var index = 0; index < blindUsers.length; index++) ...[
-                        _BlindUserTile(blindUser: blindUsers[index]),
-                        if (index != blindUsers.length - 1)
-                          const Divider(),
-                      ],
-                    ],
-                  ),
-              ],
+                    )
+                  : const Icon(Icons.refresh_rounded, size: 20),
             ),
           ),
+          const SizedBox(height: Spacing.sm),
+          if (blindUsers.isEmpty && !isLoading)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Spacing.lg),
+              child: Center(
+                child: Text(
+                  '暂无已绑定用户。\n完成首次绑定后，这里会显示列表。',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: MinimalColors.textSecondary,
+                  ),
+                ),
+              ),
+            )
+          else
+            Column(
+              children: [
+                for (var index = 0; index < blindUsers.length; index++) ...[
+                  _BlindUserTile(blindUser: blindUsers[index]),
+                  if (index != blindUsers.length - 1) const Divider(),
+                ],
+              ],
+            ),
         ],
       ),
     );
