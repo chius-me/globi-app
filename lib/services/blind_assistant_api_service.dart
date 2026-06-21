@@ -82,7 +82,7 @@ class BlindAssistantApiService {
   Future<Uint8List> textToSpeech({
     required String sessionId,
     required String text,
-    String voice = 'longxiaochun_v3',
+    String voice = 'Cherry',
     String format = 'wav',
     double speakingRate = 1.0,
   }) async {
