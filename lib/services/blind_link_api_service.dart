@@ -12,6 +12,7 @@ import '../models/family_blind_user_geofence.dart';
 import '../models/family_blind_user_map.dart';
 import '../models/family_blind_user_location.dart';
 import '../models/family_blind_user_route_history.dart';
+import '../models/family_sos_event.dart';
 
 class BlindLinkApiService {
   final Dio _publicDio;
@@ -127,14 +128,18 @@ class BlindLinkApiService {
       '/api/family/blind-users/$blindUserId/route-history',
       queryParameters: {'hours': hours},
     );
-    return FamilyBlindUserRouteHistory.fromJson(response.data as Map<String, dynamic>);
+    return FamilyBlindUserRouteHistory.fromJson(
+      response.data as Map<String, dynamic>,
+    );
   }
 
   Future<List<FamilyBlindUserGeofence>> listFamilyBlindUserGeofences({
     required String blindUserId,
   }) async {
     final dio = _protectedDio ?? _publicDio;
-    final response = await dio.get('/api/family/blind-users/$blindUserId/geofences');
+    final response = await dio.get(
+      '/api/family/blind-users/$blindUserId/geofences',
+    );
     final data = response.data as Map<String, dynamic>;
     final geofences = data['geofences'];
     if (geofences is! List) return const [];
@@ -162,7 +167,9 @@ class BlindLinkApiService {
         'enabled': true,
       },
     );
-    return FamilyBlindUserGeofence.fromJson(response.data as Map<String, dynamic>);
+    return FamilyBlindUserGeofence.fromJson(
+      response.data as Map<String, dynamic>,
+    );
   }
 
   Future<bool> deleteFamilyBlindUserGeofence({
@@ -209,5 +216,62 @@ class BlindLinkApiService {
     );
 
     return BlindFamilyCall.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<FamilySosEvent> createBlindSosEvent({
+    required String blindAccessToken,
+    BlindLocation? location,
+    String? message,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (location != null) {
+      payload.addAll({
+        'latitude': location.latitude,
+        'longitude': location.longitude,
+        if (location.accuracyMeters != null)
+          'accuracy_meters': location.accuracyMeters,
+        if (location.batteryLevel != null)
+          'battery_level': location.batteryLevel,
+        if (location.isCharging != null) 'is_charging': location.isCharging,
+      });
+    }
+    final trimmedMessage = message?.trim();
+    if (trimmedMessage != null && trimmedMessage.isNotEmpty) {
+      payload['message'] = trimmedMessage;
+    }
+
+    final response = await _publicDio.post(
+      '/api/blind/sos',
+      data: payload,
+      options: Options(headers: {'Authorization': 'Bearer $blindAccessToken'}),
+    );
+    return FamilySosEvent.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<List<FamilySosEvent>> listFamilySosEvents({
+    String status = 'active',
+  }) async {
+    final dio = _protectedDio ?? _publicDio;
+    final response = await dio.get(
+      '/api/family/sos-events',
+      queryParameters: {'status': status},
+    );
+    final data = response.data as Map<String, dynamic>;
+    final events = data['sos_events'];
+    if (events is! List) return const [];
+    return events
+        .whereType<Map<String, dynamic>>()
+        .map(FamilySosEvent.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<FamilySosEvent> acknowledgeFamilySosEvent({
+    required String sosEventId,
+  }) async {
+    final dio = _protectedDio ?? _publicDio;
+    final response = await dio.post(
+      '/api/family/sos-events/$sosEventId/acknowledge',
+    );
+    return FamilySosEvent.fromJson(response.data as Map<String, dynamic>);
   }
 }

@@ -147,6 +147,25 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
     ).showSnackBar(const SnackBar(content: Text('当前位置已上传给家属')));
   }
 
+  Future<void> _sendSos() async {
+    final blindMode = context.read<BlindModeProvider>();
+    final result = await blindMode.sendSos();
+    if (!mounted || result == null) {
+      return;
+    }
+    HapticFeedback.heavyImpact();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('SOS 已发送给家属')));
+  }
+
+  void _showSosHint() {
+    HapticFeedback.selectionClick();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('请长按 SOS 按钮发送紧急求助')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -268,15 +287,17 @@ class _BlindHomeScreenState extends State<BlindHomeScreen>
                         const SizedBox(width: Spacing.md),
                         Expanded(
                           child: _BigButton(
-                            icon: Icons.sos_rounded,
-                            label: '呼叫SOS',
-                            semanticsHint: '紧急求助功能还在设计中',
+                            icon: blindMode.isSendingSos
+                                ? Icons.sync
+                                : Icons.sos_rounded,
+                            label: blindMode.isSendingSos ? '发送中' : '长按SOS',
+                            semanticsHint: '长按发送紧急求助给家属',
+                            isLoading: blindMode.isSendingSos,
                             isDestructive: true,
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('功能开发中')),
-                              );
-                            },
+                            onTap: blindMode.isSendingSos ? null : _showSosHint,
+                            onLongPress: blindMode.isSendingSos
+                                ? null
+                                : _sendSos,
                           ),
                         ),
                       ],
@@ -331,6 +352,7 @@ class _BigButton extends StatelessWidget {
   final bool isSecondary;
   final bool isCompact;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   const _BigButton({
     required this.icon,
@@ -341,6 +363,7 @@ class _BigButton extends StatelessWidget {
     this.isSecondary = false,
     this.isCompact = false,
     this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -366,14 +389,23 @@ class _BigButton extends StatelessWidget {
             HapticFeedback.mediumImpact();
             onTap!();
           };
+    final effectiveOnLongPress = (isLoading || onLongPress == null)
+        ? null
+        : () {
+            HapticFeedback.heavyImpact();
+            onLongPress!();
+          };
 
     return Semantics(
       button: true,
       label: label,
-      hint: '$semanticsHint，双击以激活',
-      enabled: effectiveOnTap != null,
+      hint: onLongPress == null
+          ? '$semanticsHint，双击以激活'
+          : '$semanticsHint，双击提示，长按激活',
+      enabled: effectiveOnTap != null || effectiveOnLongPress != null,
       child: InkWell(
         onTap: effectiveOnTap,
+        onLongPress: effectiveOnLongPress,
         borderRadius: BorderRadius.circular(
           isCompact ? RadiusTokens.soft : RadiusTokens.card,
         ),

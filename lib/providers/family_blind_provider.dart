@@ -11,6 +11,7 @@ import '../models/family_blind_user_geofence.dart';
 import '../models/family_blind_user_map.dart';
 import '../models/family_blind_user_location.dart';
 import '../models/family_blind_user_route_history.dart';
+import '../models/family_sos_event.dart';
 import '../services/blind_link_api_service.dart';
 import '../services/secure_storage_service.dart';
 import '../utils/api_error.dart';
@@ -23,23 +24,30 @@ class FamilyBlindProvider extends ChangeNotifier {
 
   BlindLinkCode? _latestLinkCode;
   List<FamilyBlindUser> _blindUsers = const [];
+  List<FamilySosEvent> _activeSosEvents = const [];
   String? _errorMessage;
   bool _isCreatingLinkCode = false;
   bool _isLoadingBlindUsers = false;
   bool _isDeletingBlindUser = false;
+  bool _isLoadingSosEvents = false;
+  bool _isAcknowledgingSos = false;
 
   FamilyBlindProvider({
     required BlindLinkApiService blindApi,
     required SecureStorageService storage,
-  })  : _blindApi = blindApi,
-        _storage = storage;
+  }) : _blindApi = blindApi,
+       _storage = storage;
 
   BlindLinkCode? get latestLinkCode => _latestLinkCode;
   List<FamilyBlindUser> get blindUsers => List.unmodifiable(_blindUsers);
+  List<FamilySosEvent> get activeSosEvents =>
+      List.unmodifiable(_activeSosEvents);
   String? get errorMessage => _errorMessage;
   bool get isCreatingLinkCode => _isCreatingLinkCode;
   bool get isLoadingBlindUsers => _isLoadingBlindUsers;
   bool get isDeletingBlindUser => _isDeletingBlindUser;
+  bool get isLoadingSosEvents => _isLoadingSosEvents;
+  bool get isAcknowledgingSos => _isAcknowledgingSos;
 
   Future<BlindLinkCode?> createBlindLinkCode({
     required String blindUserName,
@@ -143,6 +151,57 @@ class FamilyBlindProvider extends ChangeNotifier {
     return result;
   }
 
+  Future<void> refreshSosEvents() async {
+    if (_isLoadingSosEvents) {
+      return;
+    }
+
+    _isLoadingSosEvents = true;
+    notifyListeners();
+    try {
+      _activeSosEvents = await _blindApi.listFamilySosEvents();
+    } catch (error) {
+      _errorMessage = resolveApiErrorMessage(
+        error,
+        fallback: 'SOS 求助加载失败，请稍后重试。',
+      );
+    } finally {
+      _isLoadingSosEvents = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshHomeData() async {
+    await refreshBlindUsers();
+    await refreshSosEvents();
+  }
+
+  Future<bool> acknowledgeSosEvent(String sosEventId) async {
+    if (_isAcknowledgingSos) {
+      return false;
+    }
+
+    _isAcknowledgingSos = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _blindApi.acknowledgeFamilySosEvent(sosEventId: sosEventId);
+      _activeSosEvents = _activeSosEvents
+          .where((event) => event.sosEventId != sosEventId)
+          .toList(growable: false);
+      return true;
+    } catch (error) {
+      _errorMessage = resolveApiErrorMessage(
+        error,
+        fallback: 'SOS 确认失败，请稍后重试。',
+      );
+      return false;
+    } finally {
+      _isAcknowledgingSos = false;
+      notifyListeners();
+    }
+  }
+
   Future<FamilyBlindUserRouteHistory> getBlindUserRouteHistory(
     String blindUserId, {
     int hours = 24,
@@ -153,7 +212,9 @@ class FamilyBlindProvider extends ChangeNotifier {
     );
   }
 
-  Future<List<FamilyBlindUserGeofence>> listBlindUserGeofences(String blindUserId) {
+  Future<List<FamilyBlindUserGeofence>> listBlindUserGeofences(
+    String blindUserId,
+  ) {
     return _blindApi.listFamilyBlindUserGeofences(blindUserId: blindUserId);
   }
 
@@ -248,10 +309,13 @@ class FamilyBlindProvider extends ChangeNotifier {
     unawaited(disconnectLocationUpdates());
     _latestLinkCode = null;
     _blindUsers = const [];
+    _activeSosEvents = const [];
     _errorMessage = null;
     _isCreatingLinkCode = false;
     _isLoadingBlindUsers = false;
     _isDeletingBlindUser = false;
+    _isLoadingSosEvents = false;
+    _isAcknowledgingSos = false;
     notifyListeners();
   }
 

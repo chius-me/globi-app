@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../config/design_tokens.dart';
 import '../models/blind_link_code.dart';
 import '../models/family_blind_user.dart';
+import '../models/family_sos_event.dart';
 import '../providers/app_mode_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/family_blind_provider.dart';
@@ -31,7 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<FamilyBlindProvider>().refreshBlindUsers();
+      context.read<FamilyBlindProvider>().refreshHomeData();
     });
   }
 
@@ -44,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshHome(AuthProvider auth) async {
     await auth.refreshAuthenticatedSession();
     if (!mounted) return;
-    await context.read<FamilyBlindProvider>().refreshBlindUsers();
+    await context.read<FamilyBlindProvider>().refreshHomeData();
   }
 
   Future<void> _generateBlindLinkCode(FamilyBlindProvider familyBlind) async {
@@ -57,9 +58,9 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showCopySnackbar(String code) {
     Clipboard.setData(ClipboardData(text: code.replaceAll('-', '')));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('授权码已复制')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('授权码已复制')));
   }
 
   @override
@@ -77,9 +78,12 @@ class _HomeScreenState extends State<HomeScreen> {
             onCopy: () => _showCopySnackbar(
               familyBlind.latestLinkCode!.authorizationCode,
             ),
+            sosEvents: familyBlind.activeSosEvents,
+            isAcknowledgingSos: familyBlind.isAcknowledgingSos,
+            onAcknowledgeSos: familyBlind.acknowledgeSosEvent,
             blindUsers: familyBlind.blindUsers,
             isLoading: familyBlind.isLoadingBlindUsers,
-            onRefresh: familyBlind.refreshBlindUsers,
+            onRefresh: familyBlind.refreshHomeData,
           ),
           _SettingsTab(
             isLocalLogin: auth.isLocalLogin,
@@ -98,10 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return Scaffold(
           backgroundColor: MinimalColors.lightBg,
           body: SafeArea(
-            child: IndexedStack(
-              index: _currentTabIndex,
-              children: pages,
-            ),
+            child: IndexedStack(index: _currentTabIndex, children: pages),
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _currentTabIndex,
@@ -160,6 +161,9 @@ class _MainTab extends StatelessWidget {
   final VoidCallback onGenerate;
   final VoidCallback onDismissError;
   final VoidCallback onCopy;
+  final List<FamilySosEvent> sosEvents;
+  final bool isAcknowledgingSos;
+  final Future<bool> Function(String sosEventId) onAcknowledgeSos;
   final List<FamilyBlindUser> blindUsers;
   final bool isLoading;
   final Future<void> Function() onRefresh;
@@ -172,6 +176,9 @@ class _MainTab extends StatelessWidget {
     required this.onGenerate,
     required this.onDismissError,
     required this.onCopy,
+    required this.sosEvents,
+    required this.isAcknowledgingSos,
+    required this.onAcknowledgeSos,
     required this.blindUsers,
     required this.isLoading,
     required this.onRefresh,
@@ -183,7 +190,10 @@ class _MainTab extends StatelessWidget {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
-        Spacing.lg, Spacing.xl, Spacing.lg, Spacing.xxl,
+        Spacing.lg,
+        Spacing.xl,
+        Spacing.lg,
+        Spacing.xxl,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -211,6 +221,14 @@ class _MainTab extends StatelessWidget {
                 onDismiss: onDismissError,
               ),
             ),
+          if (sosEvents.isNotEmpty) ...[
+            _SosEventsSection(
+              sosEvents: sosEvents,
+              isAcknowledging: isAcknowledgingSos,
+              onAcknowledge: onAcknowledgeSos,
+            ),
+            const SizedBox(height: Spacing.lg),
+          ],
           GlobiCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -380,6 +398,139 @@ class _BoundUsersSection extends StatelessWidget {
   }
 }
 
+class _SosEventsSection extends StatelessWidget {
+  final List<FamilySosEvent> sosEvents;
+  final bool isAcknowledging;
+  final Future<bool> Function(String sosEventId) onAcknowledge;
+
+  const _SosEventsSection({
+    required this.sosEvents,
+    required this.isAcknowledging,
+    required this.onAcknowledge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GlobiCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GlobiCardHeader(
+            leading: const Icon(
+              Icons.sos_rounded,
+              color: MinimalColors.accentRedText,
+            ),
+            title: '紧急求助',
+            subtitle: '请立即联系或查看位置。',
+          ),
+          const SizedBox(height: Spacing.md),
+          for (var index = 0; index < sosEvents.length; index++) ...[
+            _SosEventTile(
+              event: sosEvents[index],
+              isAcknowledging: isAcknowledging,
+              onAcknowledge: onAcknowledge,
+            ),
+            if (index != sosEvents.length - 1) const Divider(),
+          ],
+          const SizedBox(height: Spacing.sm),
+          Text(
+            'App 内提醒为主，邮件仅用于记录和备份。',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: MinimalColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SosEventTile extends StatelessWidget {
+  final FamilySosEvent event;
+  final bool isAcknowledging;
+  final Future<bool> Function(String sosEventId) onAcknowledge;
+
+  const _SosEventTile({
+    required this.event,
+    required this.isAcknowledging,
+    required this.onAcknowledge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final batteryText = event.batteryLevel == null
+        ? '电量未知'
+        : '电量 ${(event.batteryLevel! * 100).round()}%';
+    final chargingText = event.isCharging == true ? '，充电中' : '';
+    final locationText = event.latitude == null || event.longitude == null
+        ? '没有定位'
+        : '${event.latitude!.toStringAsFixed(5)}, ${event.longitude!.toStringAsFixed(5)}';
+    final accuracyText = event.accuracyMeters == null
+        ? '精度未知'
+        : '精度约 ${event.accuracyMeters!.round()} 米';
+    final emailText = event.emailSentAt != null
+        ? '邮件记录已发送'
+        : (event.emailError == null ? '邮件记录待发送' : '邮件记录发送失败');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(Spacing.md),
+      decoration: BoxDecoration(
+        color: MinimalColors.accentRedBg,
+        borderRadius: BorderRadius.circular(RadiusTokens.soft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${event.blindUserName} 正在求助',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: MinimalColors.accentRedText,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: Spacing.xs),
+          Text(
+            '${_formatDateTime(event.createdAt)} · $batteryText$chargingText',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: MinimalColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: Spacing.sm),
+          _InfoRow(label: '位置', value: locationText),
+          const SizedBox(height: Spacing.xs),
+          _InfoRow(label: '精度', value: accuracyText),
+          const SizedBox(height: Spacing.xs),
+          _InfoRow(label: '邮件', value: emailText),
+          const SizedBox(height: Spacing.md),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: isAcknowledging
+                  ? null
+                  : () => onAcknowledge(event.sosEventId),
+              icon: isAcknowledging
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check_circle_outline_rounded),
+              label: const Text('已收到求助'),
+              style: FilledButton.styleFrom(
+                backgroundColor: MinimalColors.accentRedText,
+                foregroundColor: MinimalColors.textInverse,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SettingsTab extends StatelessWidget {
   final bool isLocalLogin;
   final VoidCallback onRefresh;
@@ -399,7 +550,10 @@ class _SettingsTab extends StatelessWidget {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
-        Spacing.lg, Spacing.lg, Spacing.lg, Spacing.xxl,
+        Spacing.lg,
+        Spacing.lg,
+        Spacing.lg,
+        Spacing.xxl,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -472,14 +626,16 @@ class _SettingsTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 22, color: titleColor ?? theme.colorScheme.onSurface),
+            Icon(
+              icon,
+              size: 22,
+              color: titleColor ?? theme.colorScheme.onSurface,
+            ),
             const SizedBox(width: Spacing.md),
             Expanded(
               child: Text(
                 title,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: titleColor,
-                ),
+                style: theme.textTheme.bodyLarge?.copyWith(color: titleColor),
               ),
             ),
             Icon(
@@ -535,9 +691,9 @@ class _BlindUserTile extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(RadiusTokens.soft),
-      onTap: () => Navigator.of(context).push(
-        FamilyBlindUserLocationScreen.route(blindUser: blindUser),
-      ),
+      onTap: () => Navigator.of(
+        context,
+      ).push(FamilyBlindUserLocationScreen.route(blindUser: blindUser)),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
         child: Row(
@@ -578,7 +734,9 @@ class _BlindUserTile extends StatelessWidget {
                           color: isFresh
                               ? MinimalColors.accentGreenBg
                               : MinimalColors.accentRedBg,
-                          borderRadius: BorderRadius.circular(RadiusTokens.pill),
+                          borderRadius: BorderRadius.circular(
+                            RadiusTokens.pill,
+                          ),
                         ),
                         child: Text(
                           isFresh ? '最新' : '离线',

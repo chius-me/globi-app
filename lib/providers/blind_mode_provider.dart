@@ -9,6 +9,7 @@ import '../models/blind_identity.dart';
 import '../models/blind_link_result.dart';
 import '../models/blind_location.dart';
 import '../models/blind_location_upload_result.dart';
+import '../models/family_sos_event.dart';
 import '../services/blind_link_api_service.dart';
 import '../services/location_service.dart';
 import '../services/secure_storage_service.dart';
@@ -33,6 +34,7 @@ class BlindModeProvider extends ChangeNotifier {
   bool _isRefreshingIdentity = false;
   bool _isUploadingLocation = false;
   bool _isCallingFamily = false;
+  bool _isSendingSos = false;
   bool _trackingEnabled = false;
   Timer? _uploadTimer;
   Future<void>? _initializeFuture;
@@ -56,6 +58,7 @@ class BlindModeProvider extends ChangeNotifier {
   bool get isRefreshingIdentity => _isRefreshingIdentity;
   bool get isUploadingLocation => _isUploadingLocation;
   bool get isCallingFamily => _isCallingFamily;
+  bool get isSendingSos => _isSendingSos;
   bool get isLinked => _status == BlindSessionStatus.linked;
 
   Future<void> initialize() {
@@ -225,6 +228,55 @@ class BlindModeProvider extends ChangeNotifier {
     }
   }
 
+  Future<FamilySosEvent?> sendSos() async {
+    if (!isLinked || _isSendingSos) {
+      return null;
+    }
+
+    final blindAccessToken = await _storage.getBlindAccessToken();
+    if (blindAccessToken == null || blindAccessToken.isEmpty) {
+      await _clearBlindAuthorization();
+      return null;
+    }
+
+    _isSendingSos = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    BlindLocation? location;
+    try {
+      final position = await _locationService.getCurrentPosition();
+      location = await _locationFromPosition(position);
+      _lastUploadedLocation = location;
+    } catch (error) {
+      debugPrint('SOS location unavailable: $error');
+      location = _lastUploadedLocation;
+    }
+
+    try {
+      final result = await _blindApi.createBlindSosEvent(
+        blindAccessToken: blindAccessToken,
+        location: location,
+        message: '盲人用户触发紧急求助',
+      );
+      _errorMessage = null;
+      return result;
+    } catch (error) {
+      if (isUnauthorizedError(error)) {
+        await _clearBlindAuthorization(errorMessage: '盲人授权已失效，请重新输入授权码。');
+      } else {
+        _errorMessage = resolveApiErrorMessage(
+          error,
+          fallback: 'SOS 求助发送失败，请稍后再试。',
+        );
+      }
+      return null;
+    } finally {
+      _isSendingSos = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> _uploadPosition(
     Position position, {
     bool silentErrors = true,
@@ -242,18 +294,7 @@ class BlindModeProvider extends ChangeNotifier {
     }
 
     try {
-      final location = BlindLocation(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        accuracyMeters: _finiteDouble(position.accuracy),
-        altitudeMeters: _finiteDouble(position.altitude),
-        speedMps: _finiteDouble(position.speed),
-        headingDegrees: _finiteDouble(position.heading),
-        provider: 'geolocator',
-        batteryLevel: await _batteryLevel(),
-        isCharging: await _isCharging(),
-        capturedAt: position.timestamp.toUtc(),
-      );
+      final location = await _locationFromPosition(position);
 
       final result = await _blindApi.uploadBlindLocation(
         blindAccessToken: blindAccessToken,
@@ -411,6 +452,21 @@ class BlindModeProvider extends ChangeNotifier {
     } catch (_) {
       return null;
     }
+  }
+
+  Future<BlindLocation> _locationFromPosition(Position position) async {
+    return BlindLocation(
+      latitude: position.latitude,
+      longitude: position.longitude,
+      accuracyMeters: _finiteDouble(position.accuracy),
+      altitudeMeters: _finiteDouble(position.altitude),
+      speedMps: _finiteDouble(position.speed),
+      headingDegrees: _finiteDouble(position.heading),
+      provider: 'geolocator',
+      batteryLevel: await _batteryLevel(),
+      isCharging: await _isCharging(),
+      capturedAt: position.timestamp.toUtc(),
+    );
   }
 
   @override
